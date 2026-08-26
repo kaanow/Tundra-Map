@@ -1,0 +1,6 @@
+# Give the `dialout` group access to Brother QL-series label printers over USB.
+# Install with: sudo install -m 0644 99-brother-ql.rules /etc/udev/rules.d/
+# Then: sudo udevadm control --reload && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="209c", MODE="0664", GROUP="dialout"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="209b", MODE="0664", GROUP="dialout"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="04f9", ATTRS{idProduct}=="2042", MODE="0664", GROUP="dialout"

@@ -1,0 +1,68 @@
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, type Item } from '../api';
+
+export default function ItemDetail() {
+  const { id } = useParams<{ id: string }>();
+  const nav = useNavigate();
+  const [item, setItem] = useState<Item | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => { if (id) getItem(id).then(setItem).catch((e) => setErr(String(e))); }, [id]);
+
+  function flash(m: string) { setToast(m); setTimeout(() => setToast(null), 2000); }
+
+  async function onConsume() {
+    if (!item) return;
+    if (!confirm(`Mark "${item.name}" as consumed?`)) return;
+    const updated = await consumeItem(item.id, getUser() || undefined);
+    setItem(updated);
+    flash('Consumed');
+  }
+  async function onPrint() {
+    if (!item) return;
+    await enqueuePrint(item.id, getUser() || undefined);
+    flash('Print queued');
+  }
+  async function onDelete() {
+    if (!item) return;
+    if (!confirm(`Delete "${item.name}"? This cannot be undone.`)) return;
+    await deleteItem(item.id);
+    nav('/', { replace: true });
+  }
+
+  if (err) return <div className="err">{err}</div>;
+  if (!item) return <div className="empty">Loading…</div>;
+
+  return (
+    <div className="detail">
+      <h2>{item.name}</h2>
+      <div className="date">
+        Added {new Date(item.added_at).toLocaleDateString()}
+        {item.added_by && <> by {item.added_by}</>}
+      </div>
+
+      <dl className="kv">
+        {item.quantity != null && (<><dt>Quantity</dt><dd>{item.quantity}{item.unit ? ` ${item.unit}` : ''}</dd></>)}
+        {item.category && (<><dt>Category</dt><dd>{item.category}</dd></>)}
+        {item.location && (<><dt>Location</dt><dd>{item.location}</dd></>)}
+        {item.source   && (<><dt>Source</dt>  <dd>{item.source}</dd></>)}
+        {item.notes    && (<><dt>Notes</dt>   <dd style={{ whiteSpace: 'pre-wrap' }}>{item.notes}</dd></>)}
+        {item.consumed_at && (
+          <><dt>Consumed</dt>
+            <dd>{new Date(item.consumed_at).toLocaleDateString()}
+              {item.consumed_by && <> by {item.consumed_by}</>}</dd></>
+        )}
+      </dl>
+
+      <div className="actions">
+        {!item.consumed_at && <button className="ok" onClick={onConsume}>Mark consumed</button>}
+        <button className="ghost" onClick={onPrint}>Print label again</button>
+        <button className="danger" onClick={onDelete}>Delete</button>
+      </div>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
