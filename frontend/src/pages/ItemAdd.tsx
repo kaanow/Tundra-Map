@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createItem, enqueuePrint, getUser } from '../api';
+import { createItem, enqueuePrint, getUser, uploadPhoto } from '../api';
 
 export default function ItemAdd() {
   const nav = useNavigate();
@@ -11,9 +11,16 @@ export default function ItemAdd() {
   const [location, setLocation] = useState('');
   const [source, setSource] = useState('');
   const [notes, setNotes] = useState('');
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [printLabel, setPrintLabel] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  function onPhotoChange(f: File | null) {
+    setPhoto(f);
+    setPhotoPreview(f ? URL.createObjectURL(f) : null);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,6 +37,7 @@ export default function ItemAdd() {
         notes: notes || undefined,
         added_by: getUser() || undefined,
       });
+      if (photo) await uploadPhoto(item.id, photo);
       if (printLabel) await enqueuePrint(item.id, getUser() || undefined);
       nav('/', { replace: true });
     } catch (e) {
@@ -78,6 +86,17 @@ export default function ItemAdd() {
 
       <label>Notes</label>
       <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+
+      <label>Photo</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <input type="file" accept="image/*" capture="environment"
+               style={{ flex: 1 }}
+               onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)} />
+        {photoPreview && (
+          <img src={photoPreview} alt=""
+               style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover' }} />
+        )}
+      </div>
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16, color: 'var(--fg)' }}>
         <input type="checkbox" style={{ width: 'auto' }}

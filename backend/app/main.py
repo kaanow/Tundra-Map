@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from . import db
 from .auth import require_secret
-from .routers import items, print_jobs
+from .routers import items, print_jobs, photos
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="tundra-map", lifespan=lifespan)
 app.include_router(items.router)
 app.include_router(print_jobs.router)
+app.include_router(photos.router)
 
 
 @app.get("/api/health")

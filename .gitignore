@@ -13,3 +13,6 @@ build/
 backend/app/static/
 .DS_Store
 .railway/
+frontend/tsconfig.tsbuildinfo
+photos/
+

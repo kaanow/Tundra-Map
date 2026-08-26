@@ -15,9 +15,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import psycopg
-from brother_ql.backends.helpers import send
-from brother_ql.conversion import convert
-from brother_ql.raster import BrotherQLRaster
 
 from render import render_label
 
@@ -31,9 +28,10 @@ DATABASE_URL   = os.environ["DATABASE_URL"]
 PUBLIC_BASE    = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
 SHARED_SECRET  = os.environ.get("SHARED_SECRET", "")
 PRINTER_MODEL  = os.environ.get("PRINTER_MODEL", "QL-810W")
-PRINTER_BACKEND = os.environ.get("PRINTER_BACKEND", "pyusb")
+PRINTER_BACKEND = os.environ.get("PRINTER_BACKEND", "pyusb")  # "file" writes PNGs instead
 PRINTER_IDENT  = os.environ.get("PRINTER_IDENT", "usb://0x04f9:0x209c")
 LABEL_SIZE     = os.environ.get("LABEL_SIZE", "29x90")
+FILE_BACKEND_DIR = os.environ.get("FILE_BACKEND_DIR", "/tmp/tundra-labels")
 POLL_FALLBACK_SEC = 30
 
 _shutdown = False
@@ -55,8 +53,27 @@ def item_url(item_id: str) -> str:
     return f"{PUBLIC_BASE}/i/{item_id}"
 
 
+def _print_to_file(img, item_id: str) -> None:
+    """Dry-run mode: save the rendered label to disk instead of printing."""
+    import os
+    os.makedirs(FILE_BACKEND_DIR, exist_ok=True)
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    dest = os.path.join(FILE_BACKEND_DIR, f"{ts}_{item_id}.png")
+    img.save(dest)
+    log.info("wrote label to %s (file backend; no printer)", dest)
+
+
 def print_label(name: str, added_at: datetime, item_id: str) -> None:
     img = render_label(url=item_url(item_id), name=name, added_at=added_at, size=LABEL_SIZE)
+    if PRINTER_BACKEND == "file":
+        _print_to_file(img, item_id)
+        return
+    # Import brother_ql lazily so the worker can start on machines that lack
+    # pyusb / libusb (e.g., the dev box) as long as they're only using file mode.
+    from brother_ql.backends.helpers import send
+    from brother_ql.conversion import convert
+    from brother_ql.raster import BrotherQLRaster
+
     qlr = BrotherQLRaster(PRINTER_MODEL)
     qlr.exception_on_warning = True
     instructions = convert(

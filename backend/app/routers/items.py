@@ -35,6 +35,8 @@ async def list_items(
     consumed: bool = Query(False, description="include consumed items"),
     q: Optional[str] = Query(None, description="name search"),
     category: Optional[str] = None,
+    stale_days: Optional[int] = Query(None, ge=1, le=3650,
+                                      description="only items added more than N days ago"),
     limit: int = Query(200, le=1000),
 ):
     where = []
@@ -47,11 +49,32 @@ async def list_items(
     if category:
         where.append("i.category = %s")
         args.append(category)
+    if stale_days is not None:
+        where.append("i.added_at < now() - make_interval(days => %s)")
+        args.append(stale_days)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     sql = f"SELECT {SELECT_COLS} {JOIN} {where_sql} ORDER BY i.added_at DESC LIMIT %s"
     args.append(limit)
     async with conn() as c:
         cur = await c.execute(sql, args)
+        cols = [d.name for d in cur.description]
+        return [dict(zip(cols, row)) for row in await cur.fetchall()]
+
+
+@router.get("/stats/categories")
+async def category_stats():
+    """Buckets by category for filtering; also surfaces stale counts."""
+    async with conn() as c:
+        cur = await c.execute("""
+            SELECT
+                COALESCE(category, '') AS category,
+                count(*) FILTER (WHERE consumed_at IS NULL)                                                   AS active,
+                count(*) FILTER (WHERE consumed_at IS NULL AND added_at < now() - interval '90 days')          AS stale_90,
+                count(*) FILTER (WHERE consumed_at IS NULL AND added_at < now() - interval '180 days')         AS stale_180
+            FROM items
+            GROUP BY 1
+            ORDER BY 1
+        """)
         cols = [d.name for d in cur.description]
         return [dict(zip(cols, row)) for row in await cur.fetchall()]
 

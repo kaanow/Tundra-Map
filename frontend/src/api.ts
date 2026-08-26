@@ -50,11 +50,22 @@ async function req(path: string, init: RequestInit = {}): Promise<Response> {
   return r;
 }
 
-export async function listItems(opts: { q?: string; consumed?: boolean } = {}): Promise<Item[]> {
+export async function listItems(
+  opts: { q?: string; consumed?: boolean; category?: string; stale_days?: number } = {},
+): Promise<Item[]> {
   const p = new URLSearchParams();
   if (opts.q) p.set('q', opts.q);
   if (opts.consumed) p.set('consumed', '1');
+  if (opts.category) p.set('category', opts.category);
+  if (opts.stale_days) p.set('stale_days', String(opts.stale_days));
   const r = await req('/api/items?' + p.toString());
+  return r.json();
+}
+
+export async function uploadPhoto(id: string, file: File): Promise<{ photo_url: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const r = await req(`/api/items/${encodeURIComponent(id)}/photo`, { method: 'POST', body: form });
   return r.json();
 }
 

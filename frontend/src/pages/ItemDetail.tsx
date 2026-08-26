@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, type Item } from '../api';
+import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, uploadPhoto, type Item } from '../api';
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +32,13 @@ export default function ItemDetail() {
     nav('/', { replace: true });
   }
 
+  async function onPhoto(f: File | null) {
+    if (!item || !f) return;
+    const { photo_url } = await uploadPhoto(item.id, f);
+    setItem({ ...item, photo_url });
+    flash('Photo updated');
+  }
+
   if (err) return <div className="err">{err}</div>;
   if (!item) return <div className="empty">Loading…</div>;
 
@@ -42,6 +49,11 @@ export default function ItemDetail() {
         Added {new Date(item.added_at).toLocaleDateString()}
         {item.added_by && <> by {item.added_by}</>}
       </div>
+
+      {item.photo_url && (
+        <img src={item.photo_url} alt=""
+             style={{ width: '100%', maxHeight: 320, objectFit: 'cover', borderRadius: 12, margin: '8px 0 16px' }} />
+      )}
 
       <dl className="kv">
         {item.quantity != null && (<><dt>Quantity</dt><dd>{item.quantity}{item.unit ? ` ${item.unit}` : ''}</dd></>)}
@@ -59,6 +71,13 @@ export default function ItemDetail() {
       <div className="actions">
         {!item.consumed_at && <button className="ok" onClick={onConsume}>Mark consumed</button>}
         <button className="ghost" onClick={onPrint}>Print label again</button>
+        <label className="ghost" style={{ textAlign: 'center', cursor: 'pointer',
+                                          padding: '12px 14px', borderRadius: 8,
+                                          border: '1px solid var(--line)', background: 'transparent' }}>
+          {item.photo_url ? 'Replace photo' : 'Add photo'}
+          <input type="file" accept="image/*" capture="environment" hidden
+                 onChange={(e) => onPhoto(e.target.files?.[0] ?? null)} />
+        </label>
         <button className="danger" onClick={onDelete}>Delete</button>
       </div>
 
