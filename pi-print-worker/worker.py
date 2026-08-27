@@ -48,8 +48,9 @@ signal.signal(signal.SIGINT, _handle_signal)
 
 
 def item_url(item_id: str) -> str:
-    if SHARED_SECRET:
-        return f"{PUBLIC_BASE}/i/{item_id}?k={SHARED_SECRET}"
+    # Deliberately no ?k=SECRET here: keeps the QR modules coarse so scans
+    # still work after freezer wear. Each phone pairs once (visit any URL
+    # with ?k=) and the key sticks in localStorage forever after.
     return f"{PUBLIC_BASE}/i/{item_id}"
 
 
@@ -64,7 +65,7 @@ def _print_to_file(img, item_id: str) -> None:
 
 
 def print_label(name: str, added_at: datetime, item_id: str) -> None:
-    img = render_label(url=item_url(item_id), name=name, added_at=added_at, size=LABEL_SIZE)
+    img = render_label(url=item_url(item_id), name=name, added_at=added_at, size=LABEL_SIZE, item_id=item_id)
     if PRINTER_BACKEND == "file":
         _print_to_file(img, item_id)
         return

@@ -6,6 +6,7 @@ raster in landscape orientation → 991 wide, 306 tall):
     +------------------------------------------------+
     |  [QR]      NAME (up to 3 words, big)           |
     |  [QR]      2026-08-25                          |
+    |  id                                            |
     +------------------------------------------------+
 """
 from __future__ import annotations
@@ -52,6 +53,7 @@ def render_label(
     name: str,
     added_at: datetime,
     size: str = "29x90",
+    item_id: str | None = None,
 ) -> Image.Image:
     if size not in LABEL_SIZES:
         raise ValueError(f"unsupported label size: {size}")
@@ -60,20 +62,32 @@ def render_label(
     img = Image.new("1", (W, H), 1)  # 1-bit, white background
     draw = ImageDraw.Draw(img)
 
-    # QR on the left, square, with a bit of margin.
+    # QR on the left. ECC-H (~30% damage recovery) + border=4 (standard quiet
+    # zone) so scans still work with freezer frost / adhesive scuffs. Kept
+    # square with a margin; the short item id prints below in tiny text so a
+    # totally-destroyed QR can still be recovered by hand.
     margin = 16
-    qr_side = H - 2 * margin
+    id_font_size = 22
+    id_gap = 6
+    id_reserve = id_font_size + id_gap if item_id else 0
+    qr_side = H - 2 * margin - id_reserve
     qr = qrcode.QRCode(
         version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=10,
-        border=1,
+        border=4,
     )
     qr.add_data(url)
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("1")
     qr_img = qr_img.resize((qr_side, qr_side), Image.NEAREST)
     img.paste(qr_img, (margin, margin))
+
+    if item_id:
+        id_font = _font(id_font_size)
+        id_w = draw.textlength(item_id, font=id_font)
+        id_x = margin + (qr_side - id_w) // 2
+        draw.text((id_x, margin + qr_side + id_gap), item_id, font=id_font, fill=0)
 
     # Text area to the right of QR.
     text_x = margin + qr_side + margin
