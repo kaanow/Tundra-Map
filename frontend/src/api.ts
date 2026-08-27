@@ -31,6 +31,7 @@ const USER_STORAGE = 'frz.user';
 export function getKey(): string {
   return localStorage.getItem(KEY_STORAGE) ?? '';
 }
+export function hasKey(): boolean { return !!getKey(); }
 export function setKey(k: string) { localStorage.setItem(KEY_STORAGE, k); }
 export function getUser(): string { return localStorage.getItem(USER_STORAGE) ?? ''; }
 export function setUser(u: string) { localStorage.setItem(USER_STORAGE, u); }

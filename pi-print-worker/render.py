@@ -4,9 +4,9 @@ Layout for DK-1201 (29x90 mm, 306x991 px @ 300 DPI, but brother_ql wants the
 raster in landscape orientation → 991 wide, 306 tall):
 
     +------------------------------------------------+
-    |  [QR]      NAME (up to 3 words, big)           |
-    |  [QR]      2026-08-25                          |
-    |  id                                            |
+    |[QRQR]     NAME (up to 3 words, big)            |
+    |[QRQR]     2026-08-25                           |
+    |[QRQR]     id                                   |
     +------------------------------------------------+
 """
 from __future__ import annotations
@@ -62,15 +62,10 @@ def render_label(
     img = Image.new("1", (W, H), 1)  # 1-bit, white background
     draw = ImageDraw.Draw(img)
 
-    # QR on the left. ECC-H (~30% damage recovery) + border=4 (standard quiet
-    # zone) so scans still work with freezer frost / adhesive scuffs. Kept
-    # square with a margin; the short item id prints below in tiny text so a
-    # totally-destroyed QR can still be recovered by hand.
-    margin = 16
-    id_font_size = 22
-    id_gap = 6
-    id_reserve = id_font_size + id_gap if item_id else 0
-    qr_side = H - 2 * margin - id_reserve
+    # QR fills the full label height on the left. ECC-H (~30% damage
+    # recovery) + border=4 (standard quiet zone) so scans still work with
+    # freezer frost / adhesive scuffs.
+    qr_side = H
     qr = qrcode.QRCode(
         version=None,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -81,32 +76,36 @@ def render_label(
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("1")
     qr_img = qr_img.resize((qr_side, qr_side), Image.NEAREST)
-    img.paste(qr_img, (margin, margin))
-
-    if item_id:
-        id_font = _font(id_font_size)
-        id_w = draw.textlength(item_id, font=id_font)
-        id_x = margin + (qr_side - id_w) // 2
-        draw.text((id_x, margin + qr_side + id_gap), item_id, font=id_font, fill=0)
+    img.paste(qr_img, (0, 0))
 
     # Text area to the right of QR.
-    text_x = margin + qr_side + margin
+    margin = 16
+    text_x = qr_side + margin
     text_w = W - text_x - margin
 
     date_str = added_at.strftime("%Y-%m-%d")
     date_font = _font(48)
     name_font = _fit_text(draw, name, text_w, start=110, min_=40)
+    id_font_size = 26
+    id_font = _font(id_font_size) if item_id else None
 
-    # Vertically stack name (top) and date (bottom) in the text area.
+    # Vertically stack name (big) + date (medium) + id (small) in the text area.
     name_bbox = draw.textbbox((0, 0), name, font=name_font)
     date_bbox = draw.textbbox((0, 0), date_str, font=date_font)
     name_h = name_bbox[3] - name_bbox[1]
     date_h = date_bbox[3] - date_bbox[1]
-    gap = 16
-    stack_h = name_h + gap + date_h
+    gap = 14
+    id_gap = 10
+    id_h = 0
+    if item_id and id_font:
+        id_bbox = draw.textbbox((0, 0), item_id, font=id_font)
+        id_h = id_bbox[3] - id_bbox[1]
+    stack_h = name_h + gap + date_h + (id_gap + id_h if item_id else 0)
     y0 = (H - stack_h) // 2
 
     draw.text((text_x, y0 - name_bbox[1]), name, font=name_font, fill=0)
     draw.text((text_x, y0 + name_h + gap - date_bbox[1]), date_str, font=date_font, fill=0)
+    if item_id and id_font:
+        draw.text((text_x, y0 + name_h + gap + date_h + id_gap - id_bbox[1]), item_id, font=id_font, fill=0)
 
     return img

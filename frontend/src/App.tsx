@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { getKey, setKey, getUser, setUser } from './api';
+import { Routes, Route, useSearchParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { getKey, hasKey, setKey, getUser, setUser } from './api';
 import ItemList from './pages/ItemList';
 import ItemAdd from './pages/ItemAdd';
 import ItemDetail from './pages/ItemDetail';
@@ -8,6 +8,7 @@ import ItemDetail from './pages/ItemDetail';
 function KeyGate({ children }: { children: React.ReactNode }) {
   const [params] = useSearchParams();
   const nav = useNavigate();
+  const loc = useLocation();
   const [ready, setReady] = useState(false);
   const [input, setInput] = useState('');
   const [userInput, setUserInput] = useState(getUser());
@@ -24,7 +25,10 @@ function KeyGate({ children }: { children: React.ReactNode }) {
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!ready) return null;
-  if (!getKey()) {
+  // /i/:id is public — anyone with a scan-URL can view. Everything else
+  // requires the shared key.
+  const isPublicPath = loc.pathname.startsWith('/i/');
+  if (!hasKey() && !isPublicPath) {
     return (
       <div className="app">
         <div className="top"><h1>Tundra-Map</h1></div>

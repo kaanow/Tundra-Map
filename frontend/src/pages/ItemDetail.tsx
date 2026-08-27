@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, uploadPhoto, type Item } from '../api';
+import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, hasKey, setKey, setUser, uploadPhoto, type Item } from '../api';
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -8,6 +8,9 @@ export default function ItemDetail() {
   const [item, setItem] = useState<Item | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState(hasKey());
+  const [pairKey, setPairKey] = useState('');
+  const [pairName, setPairName] = useState(getUser());
 
   useEffect(() => { if (id) getItem(id).then(setItem).catch((e) => setErr(String(e))); }, [id]);
 
@@ -68,18 +71,35 @@ export default function ItemDetail() {
         )}
       </dl>
 
-      <div className="actions">
-        {!item.consumed_at && <button className="ok" onClick={onConsume}>Mark consumed</button>}
-        <button className="ghost" onClick={onPrint}>Print label again</button>
-        <label className="ghost" style={{ textAlign: 'center', cursor: 'pointer',
-                                          padding: '12px 14px', borderRadius: 8,
-                                          border: '1px solid var(--line)', background: 'transparent' }}>
-          {item.photo_url ? 'Replace photo' : 'Add photo'}
-          <input type="file" accept="image/*" capture="environment" hidden
-                 onChange={(e) => onPhoto(e.target.files?.[0] ?? null)} />
-        </label>
-        <button className="danger" onClick={onDelete}>Delete</button>
-      </div>
+      {unlocked ? (
+        <div className="actions">
+          {!item.consumed_at && <button className="ok" onClick={onConsume}>Mark consumed</button>}
+          <button className="ghost" onClick={onPrint}>Print label again</button>
+          <label className="ghost" style={{ textAlign: 'center', cursor: 'pointer',
+                                            padding: '12px 14px', borderRadius: 8,
+                                            border: '1px solid var(--line)', background: 'transparent' }}>
+            {item.photo_url ? 'Replace photo' : 'Add photo'}
+            <input type="file" accept="image/*" capture="environment" hidden
+                   onChange={(e) => onPhoto(e.target.files?.[0] ?? null)} />
+          </label>
+          <button className="danger" onClick={onDelete}>Delete</button>
+        </div>
+      ) : (
+        <div className="actions" style={{ borderTop: '1px solid var(--line)', paddingTop: 16, marginTop: 16 }}>
+          <p className="empty" style={{ margin: '0 0 8px' }}>Pair this device to add photos, print, or mark consumed.</p>
+          <label>Shared key</label>
+          <input value={pairKey} onChange={(e) => setPairKey(e.target.value)} placeholder="paste shared secret" />
+          <label>Your name</label>
+          <input value={pairName} onChange={(e) => setPairName(e.target.value)} placeholder="Kaan" />
+          <button onClick={() => {
+            if (!pairKey.trim()) return;
+            setKey(pairKey.trim());
+            setUser(pairName.trim());
+            setUnlocked(true);
+            flash('Paired');
+          }}>Pair</button>
+        </div>
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </div>
