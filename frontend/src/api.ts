@@ -39,7 +39,9 @@ async function req(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   const k = getKey();
   if (k) headers.set('X-Frz-Key', k);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   const r = await fetch(path, { ...init, headers });
   if (r.status === 401) {
     // Clear key so the auth screen shows.
