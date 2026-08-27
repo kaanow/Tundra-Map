@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, useSearchParams, useNavigate, useLocation, Link } from 'react-router-dom';
-import { getKey, hasKey, setKey, getUser, setUser } from './api';
+import { hasKey, setKey, getUser, setUser } from './api';
 import ItemList from './pages/ItemList';
 import ItemAdd from './pages/ItemAdd';
 import ItemDetail from './pages/ItemDetail';
