@@ -16,6 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
 COPY --from=frontend /fe/../backend/app/static ./backend/app/static
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 # Photos land in a Railway Volume mounted at /data (set PHOTO_DIR=/data/photos).
 RUN mkdir -p /data/photos
@@ -23,4 +25,4 @@ RUN mkdir -p /data/photos
 ENV PORT=8000
 EXPOSE 8000
 WORKDIR /app/backend
-CMD ["sh", "-c", "python -m app.migrate && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["/app/start.sh"]
