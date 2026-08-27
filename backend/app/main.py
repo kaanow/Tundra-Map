@@ -26,10 +26,15 @@ app.include_router(photos.router)
 
 @app.get("/api/health")
 async def health():
+    return {"ok": True, "public_base_url": os.environ.get("PUBLIC_BASE_URL", "")}
+
+
+@app.get("/api/ready")
+async def ready():
     async with db.conn() as c:
         cur = await c.execute("SELECT 1")
         (one,) = await cur.fetchone()
-    return {"ok": one == 1, "public_base_url": os.environ.get("PUBLIC_BASE_URL", "")}
+    return {"ok": one == 1}
 
 
 @app.get("/api/config", dependencies=[Depends(require_secret)])
