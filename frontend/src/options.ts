@@ -8,8 +8,8 @@ export const CATEGORIES = [
   'meat', 'fish', 'veg', 'fruit', 'prepared', 'stock', 'bread', 'dairy', 'other',
 ];
 
+// The two freezers, each with the same three spots.
 export const LOCATIONS = [
-  'top drawer', 'middle drawer', 'bottom drawer',
-  'top shelf', 'middle shelf', 'bottom shelf',
-  'door', 'basket', 'chest freezer', 'garage freezer',
+  'upstairs top shelf', 'upstairs bottom shelf', 'upstairs door',
+  'downstairs top shelf', 'downstairs bottom shelf', 'downstairs door',
 ];
