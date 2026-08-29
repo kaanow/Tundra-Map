@@ -39,6 +39,10 @@ class ItemOut(BaseModel):
     photo_url: Optional[str] = None
     consumed_at: Optional[datetime] = None
     consumed_by: Optional[str] = None
+    # Only ever non-null on the single-item route, which shows deleted items
+    # to anyone who knows the ID (i.e. is holding the printed label).
+    deleted_at: Optional[datetime] = None
+    deleted_by: Optional[str] = None
 
 
 class PrintJobOut(BaseModel):

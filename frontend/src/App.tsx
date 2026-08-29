@@ -9,7 +9,7 @@ export default function App() {
   return (
     <div className="app">
       <div className="top">
-        <h1><Link to="/" style={{ color: 'inherit' }}>Tundra-Map</Link></h1>
+        <h1><Link to="/" style={{ color: 'inherit' }}>What is in the freezer?</Link></h1>
         <div className="spacer" />
         <Link to="/settings" className="pill">{getUser() || 'set name'}</Link>
       </div>

@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Tundra-Map',
+        name: 'What is in the freezer?',
         short_name: 'Tundra',
         description: 'Freezer inventory',
         theme_color: '#0e1a2b',

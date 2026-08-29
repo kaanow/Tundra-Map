@@ -6,22 +6,26 @@ from ..models import ItemIn, ItemOut, ItemPatch
 # No auth: reaching the freezer is already a physical-access problem, and
 # nothing here destroys data. Delete sets a flag and leaves the row, so the
 # worst a stranger with a URL can do is hide or add noise, and both are
-# recoverable in psql.
+# recoverable.
 router = APIRouter(prefix="/api/items", tags=["items"])
 
 SELECT_COLS = """
     i.id, i.name, i.added_at, u1.name AS added_by,
     i.quantity, i.unit, i.source, i.notes, i.category, i.location,
-    i.photo_url, i.consumed_at, u2.name AS consumed_by
+    i.photo_url, i.consumed_at, u2.name AS consumed_by,
+    i.deleted_at, u3.name AS deleted_by
 """
 
 JOIN = """
     FROM items i
     LEFT JOIN users u1 ON u1.id = i.added_by
     LEFT JOIN users u2 ON u2.id = i.consumed_by
+    LEFT JOIN users u3 ON u3.id = i.deleted_by
 """
 
-# Soft-deleted rows stay in the table but are invisible to every route here.
+# Soft-deleted rows stay in the table but are hidden from every route that
+# browses. Only the single-item route, which you can reach solely by knowing
+# the ID, will show one.
 LIVE = "i.deleted_at IS NULL"
 
 
@@ -34,6 +38,17 @@ async def _resolve_user(cur, name: Optional[str]):
     )
     row = await cur.fetchone()
     return row[0]
+
+
+async def _fetch(item_id: str, *, include_deleted: bool = False) -> dict:
+    where = "WHERE i.id = %s" if include_deleted else f"WHERE i.id = %s AND {LIVE}"
+    async with conn() as c:
+        cur = await c.execute(f"SELECT {SELECT_COLS} {JOIN} {where}", (item_id,))
+        row = await cur.fetchone()
+        if not row:
+            raise HTTPException(404, "not found")
+        cols = [d.name for d in cur.description]
+        return dict(zip(cols, row))
 
 
 @router.get("", response_model=list[ItemOut])
@@ -101,30 +116,26 @@ async def create_item(body: ItemIn):
                  body.notes, body.category, body.location),
             )
             (new_id,) = await cur.fetchone()
-            await cur.execute(f"SELECT {SELECT_COLS} {JOIN} WHERE i.id = %s", (new_id,))
-            cols = [d.name for d in cur.description]
-            row = await cur.fetchone()
-            return dict(zip(cols, row))
+    return await _fetch(new_id)
 
 
 @router.get("/{item_id}", response_model=ItemOut)
 async def get_item(item_id: str):
-    async with conn() as c:
-        cur = await c.execute(
-            f"SELECT {SELECT_COLS} {JOIN} WHERE i.id = %s AND {LIVE}", (item_id,)
-        )
-        row = await cur.fetchone()
-        if not row:
-            raise HTTPException(404, "not found")
-        cols = [d.name for d in cur.description]
-        return dict(zip(cols, row))
+    """Deleted items are visible here on purpose.
+
+    Knowing the ID means you are almost certainly holding the printed label,
+    and a physical thing in the freezer is worth showing even if someone
+    removed it from the list. The response carries `deleted_at` so the client
+    can say so plainly and offer to undelete.
+    """
+    return await _fetch(item_id, include_deleted=True)
 
 
 @router.patch("/{item_id}", response_model=ItemOut)
 async def patch_item(item_id: str, body: ItemPatch):
     fields = body.model_dump(exclude_unset=True)
     if not fields:
-        return await get_item(item_id)
+        return await _fetch(item_id)
     sets = ", ".join(f"{k} = %s" for k in fields)
     args = list(fields.values()) + [item_id]
     async with conn() as c:
@@ -134,7 +145,7 @@ async def patch_item(item_id: str, body: ItemPatch):
             )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
-    return await get_item(item_id)
+    return await _fetch(item_id)
 
 
 @router.post("/{item_id}/consume", response_model=ItemOut)
@@ -149,12 +160,12 @@ async def consume_item(item_id: str, by: Optional[str] = None):
                 """,
                 (consumed_by_id, item_id),
             )
-    return await get_item(item_id)
+    return await _fetch(item_id)
 
 
 @router.post("/{item_id}/unconsume", response_model=ItemOut)
 async def unconsume_item(item_id: str):
-    """Undo a consume — the normal lifecycle is reversible, unlike delete."""
+    """Undo a consume — the normal lifecycle is reversible."""
     async with conn() as c:
         async with c.cursor() as cur:
             await cur.execute(
@@ -166,16 +177,15 @@ async def unconsume_item(item_id: str):
             )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
-    return await get_item(item_id)
+    return await _fetch(item_id)
 
 
 @router.delete("/{item_id}", status_code=204)
 async def delete_item(item_id: str, by: Optional[str] = None):
     """Soft delete: flag the row and leave it in the table.
 
-    Nothing in the API or the UI brings an item back — recovery means going
-    into psql and clearing deleted_at. That is the intended shape: a delete
-    the user can trust to be final, on data we can still get back.
+    The item disappears from every browsing route. It stays reachable by ID,
+    so scanning its label still works and offers an undelete.
     """
     async with conn() as c:
         async with c.cursor() as cur:
@@ -190,3 +200,18 @@ async def delete_item(item_id: str, by: Optional[str] = None):
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
     return Response(status_code=204)
+
+
+@router.post("/{item_id}/undelete", response_model=ItemOut)
+async def undelete_item(item_id: str):
+    """Bring a deleted item back. Only discoverable from the item's own page,
+    which you need the ID to reach."""
+    async with conn() as c:
+        async with c.cursor() as cur:
+            await cur.execute(
+                "UPDATE items SET deleted_at = NULL, deleted_by = NULL WHERE id = %s",
+                (item_id,),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, "not found")
+    return await _fetch(item_id)

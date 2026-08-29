@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createItem, enqueuePrint, getUser, uploadPhoto } from '../api';
+import { CATEGORIES, LOCATIONS } from '../options';
+import PhotoPicker from '../PhotoPicker';
+
+/** Examples live in the label, not in a placeholder — grey text inside an
+ *  empty box reads as "this is what you'll get if you leave it blank". */
+function Hint({ children }: { children: React.ReactNode }) {
+  return <span style={{ color: 'var(--muted)', fontWeight: 400 }}> — {children}</span>;
+}
 
 export default function ItemAdd() {
   const nav = useNavigate();
@@ -12,15 +20,9 @@ export default function ItemAdd() {
   const [source, setSource] = useState('');
   const [notes, setNotes] = useState('');
   const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [printLabel, setPrintLabel] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  function onPhotoChange(f: File | null) {
-    setPhoto(f);
-    setPhotoPreview(f ? URL.createObjectURL(f) : null);
-  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,8 +52,8 @@ export default function ItemAdd() {
   return (
     <form onSubmit={submit}>
       {err && <div className="err">{err}</div>}
-      <label>Name *</label>
-      <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="Beef stew" />
+      <label>Name *<Hint>beef stew</Hint></label>
+      <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} />
 
       <div className="row">
         <div>
@@ -60,43 +62,36 @@ export default function ItemAdd() {
                  value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         </div>
         <div>
-          <label>Unit</label>
-          <input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="portions" />
+          <label>Unit<Hint>portions</Hint></label>
+          <input value={unit} onChange={(e) => setUnit(e.target.value)} />
         </div>
       </div>
 
       <div className="row">
         <div>
           <label>Category</label>
-          <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="meat" list="cats" />
+          <input value={category} onChange={(e) => setCategory(e.target.value)} list="cats" />
           <datalist id="cats">
-            <option value="meat" /><option value="fish" /><option value="veg" />
-            <option value="prepared" /><option value="stock" /><option value="bread" />
-            <option value="fruit" /><option value="dairy" />
+            {CATEGORIES.map((c) => <option key={c} value={c} />)}
           </datalist>
         </div>
         <div>
           <label>Location</label>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="top drawer" />
+          <input value={location} onChange={(e) => setLocation(e.target.value)} list="locs" />
+          <datalist id="locs">
+            {LOCATIONS.map((l) => <option key={l} value={l} />)}
+          </datalist>
         </div>
       </div>
 
-      <label>Source</label>
-      <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Costco 2026-08" />
+      <label>Source<Hint>Costco 2026-08</Hint></label>
+      <input value={source} onChange={(e) => setSource(e.target.value)} />
 
       <label>Notes</label>
       <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
 
       <label>Photo</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <input type="file" accept="image/*" capture="environment"
-               style={{ flex: 1 }}
-               onChange={(e) => onPhotoChange(e.target.files?.[0] ?? null)} />
-        {photoPreview && (
-          <img src={photoPreview} alt=""
-               style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover' }} />
-        )}
-      </div>
+      <PhotoPicker onPick={setPhoto} />
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16, color: 'var(--fg)' }}>
         <input type="checkbox" style={{ width: 'auto' }}

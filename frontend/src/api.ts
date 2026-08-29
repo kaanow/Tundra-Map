@@ -12,6 +12,10 @@ export type Item = {
   photo_url?: string | null;
   consumed_at?: string | null;
   consumed_by?: string | null;
+  /** Set only on the single-item route, which shows deleted items to anyone
+   *  who knows the ID (i.e. is holding the printed label). */
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 };
 
 export type ItemIn = {
@@ -89,11 +93,20 @@ export async function unconsumeItem(id: string): Promise<Item> {
   return r.json();
 }
 
-/** Soft delete — the row stays in the DB, but nothing in the app shows it
- *  again. There is no undelete here on purpose; recovery is a psql job. */
+/** Soft delete — the row stays in the DB and the item stays reachable by ID,
+ *  so scanning its label still works. It just leaves every list. */
 export async function deleteItem(id: string, by?: string): Promise<void> {
   const p = by ? `?by=${encodeURIComponent(by)}` : '';
   await req(`/api/items/${encodeURIComponent(id)}${p}`, { method: 'DELETE' });
+}
+
+export async function undeleteItem(id: string): Promise<Item> {
+  const r = await req(`/api/items/${encodeURIComponent(id)}/undelete`, { method: 'POST' });
+  return r.json();
+}
+
+export async function deletePhoto(id: string): Promise<void> {
+  await req(`/api/items/${encodeURIComponent(id)}/photo`, { method: 'DELETE' });
 }
 
 export async function enqueuePrint(id: string, by?: string): Promise<void> {

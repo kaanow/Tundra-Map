@@ -37,8 +37,10 @@ input, select, textarea { width: 100%; }
 
 .app { max-width: 640px; margin: 0 auto; padding: 12px; }
 .top { display: flex; align-items: center; gap: 8px; padding: 8px 4px 16px; }
-.top h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+.top h1 { margin: 0; font-size: 18px; letter-spacing: 0.02em; line-height: 1.2; min-width: 0; }
 .top .spacer { flex: 1; }
+/* The title wraps rather than shoving the name pill off a narrow screen. */
+.top .pill { flex: 0 0 auto; white-space: nowrap; }
 
 .grid { display: grid; gap: 8px; }
 .grid.two { grid-template-columns: 1fr 1fr; }
