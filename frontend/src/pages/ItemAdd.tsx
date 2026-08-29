@@ -4,12 +4,6 @@ import { createItem, enqueuePrint, getUser, uploadPhoto } from '../api';
 import { CATEGORIES, LOCATIONS } from '../options';
 import PhotoPicker from '../PhotoPicker';
 
-/** Examples live in the label, not in a placeholder — grey text inside an
- *  empty box reads as "this is what you'll get if you leave it blank". */
-function Hint({ children }: { children: React.ReactNode }) {
-  return <span style={{ color: 'var(--muted)', fontWeight: 400 }}> — {children}</span>;
-}
-
 export default function ItemAdd() {
   const nav = useNavigate();
   const [name, setName] = useState('');
@@ -52,7 +46,7 @@ export default function ItemAdd() {
   return (
     <form onSubmit={submit}>
       {err && <div className="err">{err}</div>}
-      <label>Name *<Hint>beef stew</Hint></label>
+      <label>Name *</label>
       <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} />
 
       <div className="row">
@@ -62,7 +56,7 @@ export default function ItemAdd() {
                  value={quantity} onChange={(e) => setQuantity(e.target.value)} />
         </div>
         <div>
-          <label>Unit<Hint>portions</Hint></label>
+          <label>Unit</label>
           <input value={unit} onChange={(e) => setUnit(e.target.value)} />
         </div>
       </div>
@@ -84,7 +78,7 @@ export default function ItemAdd() {
         </div>
       </div>
 
-      <label>Source<Hint>Costco 2026-08</Hint></label>
+      <label>Source</label>
       <input value={source} onChange={(e) => setSource(e.target.value)} />
 
       <label>Notes</label>

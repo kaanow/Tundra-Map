@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 const MAX_EDGE = 1600;
 const JPEG_QUALITY = 0.9;
 
+type Facing = 'environment' | 'user';
+
 type Props = {
   /** Called with the chosen/captured image, or null when cleared. */
   onPick: (file: File | null) => void;
@@ -20,47 +22,48 @@ function hasCamera(): boolean {
 
 export default function PhotoPicker({ onPick, currentUrl, onRemove }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [live, setLive] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [starting, setStarting] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [facing, setFacing] = useState<'environment' | 'user'>('environment');
+  const [facing, setFacing] = useState<Facing>('environment');
 
-  function stop() {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setLive(false);
-  }
+  // The <video> only exists once a stream is set, so it cannot be wired up
+  // inside start() — the ref is still null there on the first open. Attach
+  // after render instead, and re-attach when flipping swaps the stream.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v && stream) {
+      v.srcObject = stream;
+      v.play().catch(() => {});
+    }
+  }, [stream]);
 
-  // Release the camera if the user navigates away mid-capture.
-  useEffect(() => stop, []);
+  // Releases the old stream on flip, and the live one on unmount.
+  useEffect(() => () => stream?.getTracks().forEach((t) => t.stop()), [stream]);
 
   // Revoke object URLs so previews don't leak as the user retakes.
-  useEffect(() => {
-    return () => { if (preview) URL.revokeObjectURL(preview); };
-  }, [preview]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  async function start(next: 'environment' | 'user' = facing) {
+  async function start(next: Facing = facing) {
     setErr(null);
+    setStarting(true);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const next_stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: next, width: { ideal: 1920 }, height: { ideal: 1920 } },
         audio: false,
       });
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = stream;
       setFacing(next);
-      setLive(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play().catch(() => {});
-      }
+      setStream(next_stream);  // effect above attaches it once the video renders
     } catch (e) {
       // Denied permission, no camera, or a non-HTTPS origin.
       setErr(`Camera unavailable: ${e instanceof Error ? e.message : String(e)}`);
-      setLive(false);
+    } finally {
+      setStarting(false);
     }
   }
+
+  function stop() { setStream(null); }
 
   function shoot() {
     const video = videoRef.current;
@@ -97,11 +100,11 @@ export default function PhotoPicker({ onPick, currentUrl, onRemove }: Props) {
 
   const shown = preview ?? currentUrl ?? null;
 
-  if (live) {
+  if (stream) {
     return (
       <div>
         <video ref={videoRef} playsInline muted autoPlay
-               style={{ width: '100%', borderRadius: 12, background: '#000',
+               style={{ width: '100%', minHeight: 200, borderRadius: 12, background: '#000',
                         transform: facing === 'user' ? 'scaleX(-1)' : undefined }} />
         <div className="actions" style={{ marginTop: 8 }}>
           <button type="button" onClick={shoot}>Capture</button>
@@ -125,8 +128,8 @@ export default function PhotoPicker({ onPick, currentUrl, onRemove }: Props) {
       )}
       <div className="actions">
         {hasCamera() && (
-          <button type="button" onClick={() => start()}>
-            {shown ? 'Retake photo' : 'Take photo'}
+          <button type="button" disabled={starting} onClick={() => start()}>
+            {starting ? 'Starting camera…' : shown ? 'Retake photo' : 'Take photo'}
           </button>
         )}
         <label className="ghost"
