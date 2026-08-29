@@ -26,7 +26,6 @@ logging.basicConfig(
 
 DATABASE_URL   = os.environ["DATABASE_URL"]
 PUBLIC_BASE    = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
-SHARED_SECRET  = os.environ.get("SHARED_SECRET", "")
 PRINTER_MODEL  = os.environ.get("PRINTER_MODEL", "QL-810W")
 PRINTER_BACKEND = os.environ.get("PRINTER_BACKEND", "pyusb")  # "file" writes PNGs instead
 PRINTER_IDENT  = os.environ.get("PRINTER_IDENT", "usb://0x04f9:0x209c")
@@ -48,9 +47,9 @@ signal.signal(signal.SIGINT, _handle_signal)
 
 
 def item_url(item_id: str) -> str:
-    # Deliberately no ?k=SECRET here: keeps the QR modules coarse so scans
-    # still work after freezer wear. Each phone pairs once (visit any URL
-    # with ?k=) and the key sticks in localStorage forever after.
+    # Short and secretless: fewer characters means coarser QR modules, which
+    # survive freezer frost and scuffing. The app has no auth, so a bare item
+    # URL is all a scanning phone needs.
     return f"{PUBLIC_BASE}/i/{item_id}"
 
 
@@ -75,17 +74,22 @@ def print_label(name: str, added_at: datetime, item_id: str) -> None:
     from brother_ql.conversion import convert
     from brother_ql.raster import BrotherQLRaster
 
+    # render_label produces portrait (width = print head width) already.
+    # RGB + red=True forces two-color raster format, which the QL-810W's firmware
+    # requires even for single-color prints. Single-color mode is silently rejected
+    # (LED blinks red, status=0x02, no specific error bit) — see memory:tundra-printer.
+    raster = img.convert("RGB")
     qlr = BrotherQLRaster(PRINTER_MODEL)
     qlr.exception_on_warning = True
     instructions = convert(
         qlr=qlr,
-        images=[img],
+        images=[raster],
         label=LABEL_SIZE,
         rotate="0",
         threshold=70.0,
         dither=False,
-        compress=False,
-        red=False,
+        compress=True,
+        red=True,
         dpi_600=False,
         hq=True,
         cut=True,
