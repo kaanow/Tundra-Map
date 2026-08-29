@@ -10,7 +10,9 @@ router = APIRouter(prefix="/api", tags=["print"])
 async def enqueue_print(item_id: str, by: Optional[str] = None):
     async with conn() as c:
         async with c.cursor() as cur:
-            await cur.execute("SELECT 1 FROM items WHERE id = %s", (item_id,))
+            await cur.execute(
+                "SELECT 1 FROM items WHERE id = %s AND deleted_at IS NULL", (item_id,)
+            )
             if not await cur.fetchone():
                 raise HTTPException(404, "item not found")
             requested_by = None

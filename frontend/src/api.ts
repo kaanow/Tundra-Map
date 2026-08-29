@@ -89,6 +89,13 @@ export async function unconsumeItem(id: string): Promise<Item> {
   return r.json();
 }
 
+/** Soft delete — the row stays in the DB, but nothing in the app shows it
+ *  again. There is no undelete here on purpose; recovery is a psql job. */
+export async function deleteItem(id: string, by?: string): Promise<void> {
+  const p = by ? `?by=${encodeURIComponent(by)}` : '';
+  await req(`/api/items/${encodeURIComponent(id)}${p}`, { method: 'DELETE' });
+}
+
 export async function enqueuePrint(id: string, by?: string): Promise<void> {
   const p = by ? `?by=${encodeURIComponent(by)}` : '';
   await req(`/api/items/${encodeURIComponent(id)}/print${p}`, { method: 'POST' });

@@ -106,6 +106,7 @@ def claim_and_print_one(conn: psycopg.Connection) -> bool:
             FROM print_jobs pj
             JOIN items i ON i.id = pj.item_id
             WHERE pj.printed_at IS NULL AND pj.error IS NULL
+              AND i.deleted_at IS NULL
             ORDER BY pj.id
             FOR UPDATE SKIP LOCKED
             LIMIT 1

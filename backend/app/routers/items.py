@@ -1,11 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from ..db import conn
 from ..models import ItemIn, ItemOut, ItemPatch
 
-# No auth: reaching the freezer is already a physical-access problem, and the
-# API is append-and-amend only. Nothing here deletes an item — consuming is a
-# soft, reversible flag — so the worst a stranger can do is add noise.
+# No auth: reaching the freezer is already a physical-access problem, and
+# nothing here destroys data. Delete sets a flag and leaves the row, so the
+# worst a stranger with a URL can do is hide or add noise, and both are
+# recoverable in psql.
 router = APIRouter(prefix="/api/items", tags=["items"])
 
 SELECT_COLS = """
@@ -19,6 +20,9 @@ JOIN = """
     LEFT JOIN users u1 ON u1.id = i.added_by
     LEFT JOIN users u2 ON u2.id = i.consumed_by
 """
+
+# Soft-deleted rows stay in the table but are invisible to every route here.
+LIVE = "i.deleted_at IS NULL"
 
 
 async def _resolve_user(cur, name: Optional[str]):
@@ -41,7 +45,7 @@ async def list_items(
                                       description="only items added more than N days ago"),
     limit: int = Query(200, le=1000),
 ):
-    where = []
+    where = [LIVE]
     args: list = []
     if not consumed:
         where.append("i.consumed_at IS NULL")
@@ -54,7 +58,7 @@ async def list_items(
     if stale_days is not None:
         where.append("i.added_at < now() - make_interval(days => %s)")
         args.append(stale_days)
-    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    where_sql = "WHERE " + " AND ".join(where)
     sql = f"SELECT {SELECT_COLS} {JOIN} {where_sql} ORDER BY i.added_at DESC LIMIT %s"
     args.append(limit)
     async with conn() as c:
@@ -74,6 +78,7 @@ async def category_stats():
                 count(*) FILTER (WHERE consumed_at IS NULL AND added_at < now() - interval '90 days')          AS stale_90,
                 count(*) FILTER (WHERE consumed_at IS NULL AND added_at < now() - interval '180 days')         AS stale_180
             FROM items
+            WHERE deleted_at IS NULL
             GROUP BY 1
             ORDER BY 1
         """)
@@ -105,7 +110,9 @@ async def create_item(body: ItemIn):
 @router.get("/{item_id}", response_model=ItemOut)
 async def get_item(item_id: str):
     async with conn() as c:
-        cur = await c.execute(f"SELECT {SELECT_COLS} {JOIN} WHERE i.id = %s", (item_id,))
+        cur = await c.execute(
+            f"SELECT {SELECT_COLS} {JOIN} WHERE i.id = %s AND {LIVE}", (item_id,)
+        )
         row = await cur.fetchone()
         if not row:
             raise HTTPException(404, "not found")
@@ -122,7 +129,9 @@ async def patch_item(item_id: str, body: ItemPatch):
     args = list(fields.values()) + [item_id]
     async with conn() as c:
         async with c.cursor() as cur:
-            await cur.execute(f"UPDATE items SET {sets} WHERE id = %s", args)
+            await cur.execute(
+                f"UPDATE items SET {sets} WHERE id = %s AND deleted_at IS NULL", args
+            )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
     return await get_item(item_id)
@@ -134,7 +143,10 @@ async def consume_item(item_id: str, by: Optional[str] = None):
         async with c.cursor() as cur:
             consumed_by_id = await _resolve_user(cur, by)
             await cur.execute(
-                "UPDATE items SET consumed_at = now(), consumed_by = %s WHERE id = %s AND consumed_at IS NULL",
+                """
+                UPDATE items SET consumed_at = now(), consumed_by = %s
+                WHERE id = %s AND consumed_at IS NULL AND deleted_at IS NULL
+                """,
                 (consumed_by_id, item_id),
             )
     return await get_item(item_id)
@@ -142,14 +154,39 @@ async def consume_item(item_id: str, by: Optional[str] = None):
 
 @router.post("/{item_id}/unconsume", response_model=ItemOut)
 async def unconsume_item(item_id: str):
-    """Undo a consume. There is no delete, so this is the only way back from a
-    mistaken tap — keep it as forgiving as consume itself."""
+    """Undo a consume — the normal lifecycle is reversible, unlike delete."""
     async with conn() as c:
         async with c.cursor() as cur:
             await cur.execute(
-                "UPDATE items SET consumed_at = NULL, consumed_by = NULL WHERE id = %s",
+                """
+                UPDATE items SET consumed_at = NULL, consumed_by = NULL
+                WHERE id = %s AND deleted_at IS NULL
+                """,
                 (item_id,),
             )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
     return await get_item(item_id)
+
+
+@router.delete("/{item_id}", status_code=204)
+async def delete_item(item_id: str, by: Optional[str] = None):
+    """Soft delete: flag the row and leave it in the table.
+
+    Nothing in the API or the UI brings an item back — recovery means going
+    into psql and clearing deleted_at. That is the intended shape: a delete
+    the user can trust to be final, on data we can still get back.
+    """
+    async with conn() as c:
+        async with c.cursor() as cur:
+            deleted_by_id = await _resolve_user(cur, by)
+            await cur.execute(
+                """
+                UPDATE items SET deleted_at = now(), deleted_by = %s
+                WHERE id = %s AND deleted_at IS NULL
+                """,
+                (deleted_by_id, item_id),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, "not found")
+    return Response(status_code=204)

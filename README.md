@@ -7,9 +7,15 @@ Freezer inventory for two users. Web app (PWA) + Postgres + Brother QL-810WC lab
 - **Backend**: FastAPI + Postgres. Deploys as a single Railway service (frontend built into the image).
 - **Frontend**: Vite + React PWA. Installable to iOS/Android home screen.
 - **Pi print worker**: Python daemon on a Raspberry Pi. Persistent Postgres connection, `LISTEN print_jobs`, prints via `brother_ql` when notified.
-- **Auth**: none. No accounts, no keys. The API is append-and-amend only —
-  nothing deletes an item, and consuming is a reversible flag — so the blast
-  radius of an open endpoint is someone adding noise to the list.
+- **Auth**: none. No accounts, no keys. Nothing in the API destroys data —
+  `DELETE` sets `items.deleted_at` and leaves the row — so the blast radius of
+  an open endpoint is someone adding noise or hiding an item, and both are
+  recoverable.
+- **Deleted items**: hidden from every route, with no undelete in the API or
+  the UI. To bring one back:
+  `UPDATE items SET deleted_at = NULL WHERE id = '...';`
+  Keeping the row also stops `gen_short_id()` from reissuing that ID, so an old
+  printed label can never start resolving to a different item.
 
 ## Print pipeline
 

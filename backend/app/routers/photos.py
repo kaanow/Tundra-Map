@@ -51,7 +51,7 @@ async def upload_photo(item_id: str, file: UploadFile = File(...)):
     async with conn() as c:
         async with c.cursor() as cur:
             await cur.execute(
-                "UPDATE items SET photo_url = %s WHERE id = %s",
+                "UPDATE items SET photo_url = %s WHERE id = %s AND deleted_at IS NULL",
                 (url, item_id),
             )
             if cur.rowcount == 0:

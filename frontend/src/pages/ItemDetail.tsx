@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { consumeItem, enqueuePrint, getItem, getUser, unconsumeItem, uploadPhoto, type Item } from '../api';
+import { useNavigate, useParams } from 'react-router-dom';
+import { consumeItem, deleteItem, enqueuePrint, getItem, getUser, unconsumeItem, uploadPhoto, type Item } from '../api';
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
+  const nav = useNavigate();
   const [item, setItem] = useState<Item | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -27,6 +28,12 @@ export default function ItemDetail() {
     if (!item) return;
     await enqueuePrint(item.id, getUser() || undefined);
     flash('Print queued');
+  }
+  async function onDelete() {
+    if (!item) return;
+    if (!confirm(`Delete "${item.name}"? It will disappear from the app.`)) return;
+    await deleteItem(item.id, getUser() || undefined);
+    nav('/', { replace: true });
   }
   async function onPhoto(f: File | null) {
     if (!item || !f) return;
@@ -76,6 +83,7 @@ export default function ItemDetail() {
           <input type="file" accept="image/*" capture="environment" hidden
                  onChange={(e) => onPhoto(e.target.files?.[0] ?? null)} />
         </label>
+        <button className="danger" onClick={onDelete}>Delete</button>
       </div>
 
       {toast && <div className="toast">{toast}</div>}
