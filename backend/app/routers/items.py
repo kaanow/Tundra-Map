@@ -1,15 +1,12 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from ..auth import require_secret
+from fastapi import APIRouter, HTTPException, Query
 from ..db import conn
 from ..models import ItemIn, ItemOut, ItemPatch
 
+# No auth: reaching the freezer is already a physical-access problem, and the
+# API is append-and-amend only. Nothing here deletes an item — consuming is a
+# soft, reversible flag — so the worst a stranger can do is add noise.
 router = APIRouter(prefix="/api/items", tags=["items"])
-
-# All writes and the full-list read require the shared secret. Single-item
-# GET is intentionally public so QR scans work on unpaired phones (freezer
-# access is physical anyway).
-_AUTH = [Depends(require_secret)]
 
 SELECT_COLS = """
     i.id, i.name, i.added_at, u1.name AS added_by,
@@ -35,7 +32,7 @@ async def _resolve_user(cur, name: Optional[str]):
     return row[0]
 
 
-@router.get("", response_model=list[ItemOut], dependencies=_AUTH)
+@router.get("", response_model=list[ItemOut])
 async def list_items(
     consumed: bool = Query(False, description="include consumed items"),
     q: Optional[str] = Query(None, description="name search"),
@@ -66,7 +63,7 @@ async def list_items(
         return [dict(zip(cols, row)) for row in await cur.fetchall()]
 
 
-@router.get("/stats/categories", dependencies=_AUTH)
+@router.get("/stats/categories")
 async def category_stats():
     """Buckets by category for filtering; also surfaces stale counts."""
     async with conn() as c:
@@ -84,7 +81,7 @@ async def category_stats():
         return [dict(zip(cols, row)) for row in await cur.fetchall()]
 
 
-@router.post("", response_model=ItemOut, status_code=201, dependencies=_AUTH)
+@router.post("", response_model=ItemOut, status_code=201)
 async def create_item(body: ItemIn):
     async with conn() as c:
         async with c.cursor() as cur:
@@ -116,7 +113,7 @@ async def get_item(item_id: str):
         return dict(zip(cols, row))
 
 
-@router.patch("/{item_id}", response_model=ItemOut, dependencies=_AUTH)
+@router.patch("/{item_id}", response_model=ItemOut)
 async def patch_item(item_id: str, body: ItemPatch):
     fields = body.model_dump(exclude_unset=True)
     if not fields:
@@ -131,7 +128,7 @@ async def patch_item(item_id: str, body: ItemPatch):
     return await get_item(item_id)
 
 
-@router.post("/{item_id}/consume", response_model=ItemOut, dependencies=_AUTH)
+@router.post("/{item_id}/consume", response_model=ItemOut)
 async def consume_item(item_id: str, by: Optional[str] = None):
     async with conn() as c:
         async with c.cursor() as cur:
@@ -143,10 +140,16 @@ async def consume_item(item_id: str, by: Optional[str] = None):
     return await get_item(item_id)
 
 
-@router.delete("/{item_id}", status_code=204, dependencies=_AUTH)
-async def delete_item(item_id: str):
+@router.post("/{item_id}/unconsume", response_model=ItemOut)
+async def unconsume_item(item_id: str):
+    """Undo a consume. There is no delete, so this is the only way back from a
+    mistaken tap — keep it as forgiving as consume itself."""
     async with conn() as c:
         async with c.cursor() as cur:
-            await cur.execute("DELETE FROM items WHERE id = %s", (item_id,))
+            await cur.execute(
+                "UPDATE items SET consumed_at = NULL, consumed_by = NULL WHERE id = %s",
+                (item_id,),
+            )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
+    return await get_item(item_id)

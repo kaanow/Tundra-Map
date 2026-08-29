@@ -19,7 +19,6 @@ sudo usermod -aG dialout kaan   # if not already
 sudo tee /etc/tundra-print.env >/dev/null <<'EOF'
 DATABASE_URL=postgres://user:pass@host:5432/frz
 PUBLIC_BASE_URL=https://frz.up.railway.app
-SHARED_SECRET=your-secret
 PRINTER_MODEL=QL-810W
 PRINTER_BACKEND=pyusb
 PRINTER_IDENT=usb://0x04f9:0x209c

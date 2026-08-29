@@ -1,7 +1,7 @@
 -- Tundra-Map schema v1.
 --
--- Two-user freezer inventory. Auth is a shared secret at the HTTP layer;
--- users are just labels for attribution.
+-- Two-user freezer inventory. There is no auth at the HTTP layer; users are
+-- just labels for attribution.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 

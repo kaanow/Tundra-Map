@@ -10,9 +10,8 @@ from __future__ import annotations
 import os
 import secrets
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
-from ..auth import require_secret
 from ..db import conn
 
 PHOTO_DIR = Path(os.environ.get("PHOTO_DIR", "./photos")).resolve()
@@ -31,7 +30,7 @@ def _ext_ok(name: str) -> str | None:
     return ext if ext in ALLOWED_EXT else None
 
 
-@router.post("/items/{item_id}/photo", dependencies=[Depends(require_secret)])
+@router.post("/items/{item_id}/photo")
 async def upload_photo(item_id: str, file: UploadFile = File(...)):
     ext = _ext_ok(file.filename or "") or "jpg"
     fname = f"{item_id}_{secrets.token_urlsafe(6)}.{ext}"

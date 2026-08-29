@@ -1,11 +1,10 @@
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from . import db
-from .auth import require_secret
 from .routers import items, print_jobs, photos
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,7 +36,7 @@ async def ready():
     return {"ok": one == 1}
 
 
-@app.get("/api/config", dependencies=[Depends(require_secret)])
+@app.get("/api/config")
 async def app_config():
     return {"public_base_url": os.environ.get("PUBLIC_BASE_URL", "")}
 

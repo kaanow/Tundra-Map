@@ -1,10 +1,9 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException
-from ..auth import require_secret
+from fastapi import APIRouter, HTTPException
 from ..db import conn
 from ..models import PrintJobOut
 
-router = APIRouter(prefix="/api", tags=["print"], dependencies=[Depends(require_secret)])
+router = APIRouter(prefix="/api", tags=["print"])
 
 
 @router.post("/items/{item_id}/print", response_model=PrintJobOut, status_code=202)

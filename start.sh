@@ -6,7 +6,6 @@ echo "PORT=${PORT:-<unset>}"
 echo "DATABASE_URL=${DATABASE_URL:+set (${#DATABASE_URL} chars)}"
 echo "DATABASE_URL=${DATABASE_URL:-<unset>}" | head -c 60; echo
 echo "PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-<unset>}"
-echo "SHARED_SECRET=${SHARED_SECRET:+set (${#SHARED_SECRET} chars)}"
 echo "cwd=$(pwd)"
 
 echo "=== running migrations ==="

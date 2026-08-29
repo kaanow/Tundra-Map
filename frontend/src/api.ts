@@ -25,30 +25,19 @@ export type ItemIn = {
   added_by?: string;
 };
 
-const KEY_STORAGE = 'frz.key';
+// The name is only used for "added by" / "consumed by" attribution — it is
+// not a credential. The API has no auth at all.
 const USER_STORAGE = 'frz.user';
 
-export function getKey(): string {
-  return localStorage.getItem(KEY_STORAGE) ?? '';
-}
-export function hasKey(): boolean { return !!getKey(); }
-export function setKey(k: string) { localStorage.setItem(KEY_STORAGE, k); }
 export function getUser(): string { return localStorage.getItem(USER_STORAGE) ?? ''; }
 export function setUser(u: string) { localStorage.setItem(USER_STORAGE, u); }
 
 async function req(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
-  const k = getKey();
-  if (k) headers.set('X-Frz-Key', k);
   if (init.body && !headers.has('Content-Type') && !(init.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
   const r = await fetch(path, { ...init, headers });
-  if (r.status === 401) {
-    // Clear key so the auth screen shows.
-    localStorage.removeItem(KEY_STORAGE);
-    throw new Error('Bad or missing key');
-  }
   if (!r.ok) throw new Error(`${r.status}: ${(await r.text()).slice(0, 200)}`);
   return r;
 }
@@ -95,8 +84,9 @@ export async function consumeItem(id: string, by?: string): Promise<Item> {
   return r.json();
 }
 
-export async function deleteItem(id: string): Promise<void> {
-  await req(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export async function unconsumeItem(id: string): Promise<Item> {
+  const r = await req(`/api/items/${encodeURIComponent(id)}/unconsume`, { method: 'POST' });
+  return r.json();
 }
 
 export async function enqueuePrint(id: string, by?: string): Promise<void> {

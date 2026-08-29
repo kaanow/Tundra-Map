@@ -7,7 +7,9 @@ Freezer inventory for two users. Web app (PWA) + Postgres + Brother QL-810WC lab
 - **Backend**: FastAPI + Postgres. Deploys as a single Railway service (frontend built into the image).
 - **Frontend**: Vite + React PWA. Installable to iOS/Android home screen.
 - **Pi print worker**: Python daemon on a Raspberry Pi. Persistent Postgres connection, `LISTEN print_jobs`, prints via `brother_ql` when notified.
-- **Auth**: shared secret in URL / header. No accounts.
+- **Auth**: none. No accounts, no keys. The API is append-and-amend only —
+  nothing deletes an item, and consuming is a reversible flag — so the blast
+  radius of an open endpoint is someone adding noise to the list.
 
 ## Print pipeline
 
@@ -44,7 +46,6 @@ No inbound reachability to the Pi. Add/list/consume still work if the Pi is offl
 | var                | where     | example                                   |
 |--------------------|-----------|-------------------------------------------|
 | `DATABASE_URL`     | backend, worker | `postgres://user:pass@host:5432/frz` |
-| `SHARED_SECRET`    | backend, worker | random 32-char string                |
 | `PUBLIC_BASE_URL`  | backend, worker | `https://frz.up.railway.app`         |
 | `PHOTO_DIR`        | backend         | `/data/photos` (Railway volume)      |
 | `PRINTER_MODEL`    | worker          | `QL-810W`                            |
@@ -58,7 +59,7 @@ See `.env.example`.
 
 1. `railway link` this repo (or create a new project via the UI).
 2. Add a Postgres plugin. Railway auto-injects `DATABASE_URL`.
-3. Set `SHARED_SECRET` and `PUBLIC_BASE_URL` in service env.
+3. Set `PUBLIC_BASE_URL` in service env.
 4. (Optional) mount a Volume at `/data` for photo persistence and set `PHOTO_DIR=/data/photos`.
 5. First deploy runs migrations automatically (see `backend/app/migrate.py`).
 
@@ -75,7 +76,6 @@ cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m app.migrate
 DATABASE_URL=postgres://frz:frz_dev@localhost:5432/frz \
-SHARED_SECRET=dev-secret \
 PUBLIC_BASE_URL=http://localhost:8000 \
   .venv/bin/uvicorn app.main:app --reload
 
@@ -89,7 +89,6 @@ cd frontend && npm run build
 cd pi-print-worker
 python3 -m venv .venv && .venv/bin/pip install psycopg[binary] Pillow qrcode[pil]
 DATABASE_URL=postgres://frz:frz_dev@localhost:5432/frz \
-SHARED_SECRET=dev-secret \
 PUBLIC_BASE_URL=http://localhost:8000 \
 PRINTER_BACKEND=file \
   .venv/bin/python worker.py
