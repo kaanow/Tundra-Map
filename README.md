@@ -17,6 +17,22 @@ Freezer inventory for two users. Web app (PWA) + Postgres + Brother QL-810WC lab
   Keeping the row also stops `gen_short_id()` from reissuing that ID, so an old
   printed label can never start resolving to a different item.
 
+## Finding the printer
+
+`PRINTER_IDENT` is a hint, not a fixed address. The printer is on DHCP, so the
+worker resolves it at print time: cached address, then `PRINTER_HOST`, then
+mDNS, then a sweep of the local subnet for anything on :9100. Each candidate
+is TCP-probed before use, and a working address is cached so the common case
+costs nothing.
+
+mDNS is listed but does not work on this network — the Starlink router doesn't
+forward multicast between wireless clients, so neither avahi nor zeroconf sees
+any service at all. The subnet sweep is what actually finds the printer here.
+
+If the printer is off, discovery returns nothing and the job **stays queued**:
+unreachable is never a job failure. Prints made while the printer is off appear
+when it comes back, with a 15s-to-5min backoff in between.
+
 ## Print pipeline
 
 ```

@@ -16,6 +16,9 @@ RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/var/log /var/lib/tundra-labels
+# Created and owned by systemd; holds the cached printer address so a
+# restart doesn't have to re-run mDNS discovery. Exposed as $STATE_DIRECTORY.
+StateDirectory=tundra-print
 ProtectHome=read-only
 
 [Install]
