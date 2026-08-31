@@ -1,21 +1,24 @@
 """Render a freezer label as a PIL Image ready for brother_ql.
 
-Portrait layout for continuous 62mm tape (DK-2205 sample and DK-22205 white):
+The label is authored the way you read it — QR on top, text beneath — and
+rotated 90 degrees at the end for printing. That rotation is the whole point:
+it puts the label's long axis across the tape width, which buys a much larger
+QR for the same length of tape. You turn the strip to read it.
 
-    +---------------------+
-    |                     |
-    |       [QR QR]       |
-    |       [QR QR]       |
-    |       [QR QR]       |
-    |                     |
-    +---------------------+
-    |   NAME (big)        |
-    |   2026-08-25        |
-    |                  id |
-    +---------------------+
+    authored (read this way)          printed (comes off the tape this way)
+    +----------------+
+    |   [########]   |                +---------------------------+
+    |   [########]   |   rotate 90    |  ]##[  s'thgiht nekcihC   |
+    |   [########]   |  ----------->  |  ]##[  13-80-6202  46598  |
+    |                |                +---------------------------+
+    | Chicken thighs |                 696 dots across the tape
+    | 2026-08-31  id |                 520 dots along it (44 mm)
+    +----------------+
 
-Dimensions are (width, height) in dots at 300 DPI. Width = printable dots for the
-tape (696 for 62mm), height = tape length in feed direction.
+Sizes below are the PRINTED raster: (across-tape dots, along-tape dots). The
+across-tape figure is the printable width brother_ql expects for the media,
+which is narrower than the physical backing paper (696 dots, not 62 mm of
+paper). The along-tape figure is ours to choose on continuous tape.
 """
 from __future__ import annotations
 from datetime import datetime
@@ -23,35 +26,64 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
 
-# Portrait: (width, height) at 300 DPI.
+DPI = 300
+MM = DPI / 25.4
+
 LABEL_SIZES = {
-    "29x90":  (306, 991),   # DK-1201 die-cut address label
+    "62":     (696, 520),   # DK-2205 continuous 62mm, cut at 44mm
     "62x100": (696, 1109),  # DK-1202 shipping
+    "29x90":  (306, 991),   # DK-1201 die-cut address label
     "17x54":  (165, 566),   # DK-1204 small address
-    "62":     (696, 1050),  # DK-2205 continuous 62mm (~89mm long)
 }
 
-FONT_CANDIDATES = [
+# Share of the authored width given to the QR. The rest is the text block.
+QR_WIDTH_SHARE = 0.90
+
+FONT_CANDIDATES_BOLD = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
+]
+FONT_CANDIDATES_REGULAR = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans.ttf",
 ]
 
 
-def _font(size: int) -> ImageFont.FreeTypeFont:
-    for p in FONT_CANDIDATES:
+def _mm(v: float) -> int:
+    return int(round(v * MM))
+
+
+def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
+    for p in (FONT_CANDIDATES_BOLD if bold else FONT_CANDIDATES_REGULAR):
         if Path(p).exists():
-            return ImageFont.truetype(p, size)
+            return ImageFont.truetype(p, max(size, 8))
     return ImageFont.load_default()
 
 
-def _fit_text(draw: ImageDraw.ImageDraw, text: str, max_w: int, start: int, min_: int = 24) -> ImageFont.FreeTypeFont:
-    """Pick the largest font size where `text` fits in `max_w` pixels."""
+def _fit(draw, text: str, max_w: int, max_h: int, start: int,
+         min_: int = 18, bold: bool = True) -> ImageFont.FreeTypeFont:
+    """Largest font at which `text` fits both the width and the height given."""
     for size in range(start, min_ - 1, -2):
-        f = _font(size)
-        if draw.textlength(text, font=f) <= max_w:
+        f = _font(size, bold)
+        b = draw.textbbox((0, 0), text, font=f)
+        if (b[2] - b[0]) <= max_w and (b[3] - b[1]) <= max_h:
             return f
-    return _font(min_)
+    return _font(min_, bold)
+
+
+def _qr(url: str, side_px: int) -> Image.Image:
+    # ECC-H (~30% recoverable) with a proper quiet zone, so scans survive
+    # frost, scuffing and a bit of adhesive haze.
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=2,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white").convert("1")
+    return img.resize((side_px, side_px), Image.NEAREST)
 
 
 def render_label(
@@ -62,62 +94,54 @@ def render_label(
     size: str = "62",
     item_id: str | None = None,
 ) -> Image.Image:
+    """Return the label in PRINT orientation, ready to hand to brother_ql."""
     if size not in LABEL_SIZES:
         raise ValueError(f"unsupported label size: {size}")
-    W, H = LABEL_SIZES[size]
+    print_w, print_h = LABEL_SIZES[size]
 
+    # Author transposed, then rotate at the end.
+    W, H = print_h, print_w
     img = Image.new("1", (W, H), 1)
     draw = ImageDraw.Draw(img)
 
-    # QR: centered horizontally in the top square (W x W). ECC-H (~30% recovery)
-    # so scans still work under freezer frost / adhesive scuffs.
-    qr = qrcode.QRCode(
-        version=None,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=10,
-        border=2,
-    )
-    qr.add_data(url)
-    qr.make(fit=True)
-    qr_img = qr.make_image(fill_color="black", back_color="white").convert("1")
-    qr_side = W  # fills full width
-    qr_img = qr_img.resize((qr_side, qr_side), Image.NEAREST)
-    img.paste(qr_img, (0, 0))
+    pad = _mm(1.5)
+    qr_side = min(int(W * QR_WIDTH_SHARE), H - pad * 2)
+    img.paste(_qr(url, qr_side), ((W - qr_side) // 2, pad))
 
-    # Text area under QR.
-    margin = 20
-    text_top = qr_side + 10
-    text_bottom = H - margin
-    text_area_h = text_bottom - text_top
-    text_w = W - 2 * margin
+    # Text block fills what's left under the QR.
+    tx = pad
+    ty = pad + qr_side + _mm(1.5)
+    tw = W - pad * 2
+    th = H - ty - pad
+    if th <= _mm(3):
+        return img.rotate(90, expand=True)
 
     date_str = added_at.strftime("%Y-%m-%d")
+    name_font = _fit(draw, name, tw, int(th * 0.55), start=int(th * 0.75))
+    nb = draw.textbbox((0, 0), name, font=name_font)
+    nh = nb[3] - nb[1]
 
-    # Fit the name as large as possible on ONE line in the text area width.
-    name_font = _fit_text(draw, name, text_w, start=140, min_=48)
-    date_font = _font(56)
-    id_font = _font(36) if item_id else None
+    gap = _mm(1.0)
+    rest_h = max(th - nh - gap, _mm(2))
+    date_font = _fit(draw, date_str, int(tw * 0.62), rest_h,
+                     start=int(rest_h * 0.95), bold=False)
+    db = draw.textbbox((0, 0), date_str, font=date_font)
 
-    name_bbox = draw.textbbox((0, 0), name, font=name_font)
-    date_bbox = draw.textbbox((0, 0), date_str, font=date_font)
-    id_bbox = draw.textbbox((0, 0), item_id, font=id_font) if item_id and id_font else None
+    id_font = ib = None
+    if item_id:
+        id_font = _fit(draw, item_id, int(tw * 0.34), rest_h,
+                       start=int(rest_h * 0.95), bold=False)
+        ib = draw.textbbox((0, 0), item_id, font=id_font)
 
-    name_h = name_bbox[3] - name_bbox[1]
-    date_h = date_bbox[3] - date_bbox[1]
-    id_h = id_bbox[3] - id_bbox[1] if id_bbox else 0
+    line2_h = max(db[3] - db[1], (ib[3] - ib[1]) if ib else 0)
+    y = ty + max(0, (th - (nh + gap + line2_h)) // 2)
 
-    gap = 12
-    id_gap = 8
-    stack_h = name_h + gap + date_h + (id_gap + id_h if id_bbox else 0)
-    y0 = text_top + max(0, (text_area_h - stack_h) // 2)
+    draw.text((tx, y - nb[1]), name, font=name_font, fill=0)
+    y2 = y + nh + gap
+    draw.text((tx, y2 - db[1]), date_str, font=date_font, fill=0)
+    if item_id and id_font and ib:
+        id_w = draw.textlength(item_id, font=id_font)
+        draw.text((tx + tw - id_w, y2 - ib[1]), item_id, font=id_font, fill=0)
 
-    # Left-align name and date; right-align id.
-    draw.text((margin, y0 - name_bbox[1]), name, font=name_font, fill=0)
-    y1 = y0 + name_h + gap
-    draw.text((margin, y1 - date_bbox[1]), date_str, font=date_font, fill=0)
-    if id_bbox and id_font:
-        y2 = y1 + date_h + id_gap
-        id_w = id_bbox[2] - id_bbox[0]
-        draw.text((W - margin - id_w, y2 - id_bbox[1]), item_id, font=id_font, fill=0)
-
-    return img
+    # Long axis across the tape: this is what makes the big QR affordable.
+    return img.rotate(90, expand=True)
