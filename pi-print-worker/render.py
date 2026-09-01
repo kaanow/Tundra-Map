@@ -203,16 +203,19 @@ def render_sign(
     *,
     url: str,
     text: str,
-    length_dots: int = 1100,
+    length_dots: int = 390,
     width_dots: int = 696,
+    rotate: bool = True,
 ) -> Image.Image:
-    """A standalone sign: big QR above big text, in PRINT orientation.
+    """A standalone sign: big QR above big text, returned in PRINT orientation.
 
-    Unlike an item label this is NOT rotated. It is meant to be stuck
-    somewhere and read head-on — a freezer door, not a bag — so the strip
-    hangs the way it prints and the text is already the right way up.
+    Rotated by default, for the same reason item labels are: stacking the QR
+    above the text and then turning it puts the design's long axis across the
+    tape width, so the whole thing costs a fraction of the tape it otherwise
+    would. Pass rotate=False for a sign that hangs the way it prints.
     """
-    W, H = width_dots, length_dots
+    # Authored the way it reads, then turned at the end if we're rotating.
+    W, H = (length_dots, width_dots) if rotate else (width_dots, length_dots)
     img = Image.new("1", (W, H), 1)
     draw = ImageDraw.Draw(img)
 
@@ -224,7 +227,7 @@ def render_sign(
     tw = W - pad * 2
     th = H - ty - pad
     if th <= _mm(4):
-        return img
+        return img.rotate(90, expand=True) if rotate else img
 
     font, lines, leading, total, heights = _fit_wrapped(
         draw, text, tw, th, start=int(th * 0.9), max_lines=3
@@ -234,4 +237,4 @@ def render_sign(
         b = draw.textbbox((0, 0), line, font=font)
         draw.text(((W - (b[2] - b[0])) // 2 - b[0], y - b[1]), line, font=font, fill=0)
         y += lh + leading
-    return img
+    return img.rotate(90, expand=True) if rotate else img

@@ -51,8 +51,10 @@ default to the same length as an item label, and `--length-mm` above that
 refuses without `--big` — tape is expensive and a sign has no business being
 larger than the labels unless someone decided so on purpose.
 
-Signs are NOT rotated, unlike item labels — they hang the way they print, to be
-read head-on.
+Signs rotate like item labels do, for the same reason: stacking the QR above
+the text and then turning it puts the long axis across the tape, so the same
+design costs a third of the tape. `--no-rotate` gives an upright sign instead,
+at roughly three times the length.
 
 ## Print pipeline
 

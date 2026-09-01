@@ -43,6 +43,9 @@ def main() -> int:
                          f"same as an item label)")
     ap.add_argument("--big", action="store_true",
                     help=f"allow --length-mm above {DEFAULT_LENGTH_MM:.0f}mm")
+    ap.add_argument("--no-rotate", dest="rotate", action="store_false",
+                    help="hang the way it prints instead of turning it "
+                         "(costs much more tape for the same size)")
     ap.add_argument("--print", dest="do_print", action="store_true",
                     help="actually send it to the printer (default: preview only)")
     ap.add_argument("--label-size", default=os.environ.get("LABEL_SIZE", "62"),
@@ -66,7 +69,7 @@ def main() -> int:
             f"you really mean it."
         )
 
-    img = render_sign(url=url, text=args.text,
+    img = render_sign(url=url, text=args.text, rotate=args.rotate,
                       length_dots=int(round(args.length_mm / 25.4 * DPI)))
 
     if not args.do_print:
