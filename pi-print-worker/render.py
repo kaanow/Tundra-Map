@@ -197,3 +197,41 @@ def render_label(
 
     # Long axis across the tape: this is what makes the big QR affordable.
     return img.rotate(90, expand=True)
+
+
+def render_sign(
+    *,
+    url: str,
+    text: str,
+    length_dots: int = 1100,
+    width_dots: int = 696,
+) -> Image.Image:
+    """A standalone sign: big QR above big text, in PRINT orientation.
+
+    Unlike an item label this is NOT rotated. It is meant to be stuck
+    somewhere and read head-on — a freezer door, not a bag — so the strip
+    hangs the way it prints and the text is already the right way up.
+    """
+    W, H = width_dots, length_dots
+    img = Image.new("1", (W, H), 1)
+    draw = ImageDraw.Draw(img)
+
+    pad = _mm(3.0)
+    qr_side = min(int(W * 0.94), int(H * 0.62))
+    img.paste(_qr(url, qr_side), ((W - qr_side) // 2, pad))
+
+    ty = pad + qr_side + _mm(2.0)
+    tw = W - pad * 2
+    th = H - ty - pad
+    if th <= _mm(4):
+        return img
+
+    font, lines, leading, total, heights = _fit_wrapped(
+        draw, text, tw, th, start=int(th * 0.9), max_lines=3
+    )
+    y = ty + max(0, (th - total) // 2)
+    for line, lh in zip(lines, heights):
+        b = draw.textbbox((0, 0), line, font=font)
+        draw.text(((W - (b[2] - b[0])) // 2 - b[0], y - b[1]), line, font=font, fill=0)
+        y += lh + leading
+    return img

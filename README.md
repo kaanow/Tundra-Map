@@ -33,6 +33,22 @@ If the printer is off, discovery returns nothing and the job **stays queued**:
 unreachable is never a job failure. Prints made while the printer is off appear
 when it comes back, with a 15s-to-5min backoff in between.
 
+## One-off signs
+
+Item labels come from the queue; a sign does not. `print_sign.py` renders a QR
+plus a line of text and sends it straight to the printer, touching neither the
+database nor the queue:
+
+```sh
+cd pi-print-worker
+set -a; . /etc/tundra-print.env; set +a
+.venv/bin/python print_sign.py --text "What's in the freezer?" --url https://cold.alti2.de
+```
+
+`--save out.png` renders without printing, `--length-mm` changes how much tape
+it uses, `--copies` prints more than one. Signs are NOT rotated — they hang the
+way they print, to be read head-on.
+
 ## Print pipeline
 
 ```

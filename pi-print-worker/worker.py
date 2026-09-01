@@ -22,7 +22,8 @@ from typing import Optional
 
 import psycopg
 
-import discover
+import printing
+from printing import PrinterUnreachable
 from render import render_label
 
 log = logging.getLogger("tundra-print")
@@ -33,10 +34,7 @@ logging.basicConfig(
 
 DATABASE_URL   = os.environ["DATABASE_URL"]
 PUBLIC_BASE    = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000").rstrip("/")
-PRINTER_MODEL  = os.environ.get("PRINTER_MODEL", "QL-810W")
-PRINTER_BACKEND = os.environ.get("PRINTER_BACKEND", "network")  # "file" writes PNGs instead
-PRINTER_IDENT  = os.environ.get("PRINTER_IDENT", "tcp://192.168.4.133:9100")
-PRINTER_HOST   = os.environ.get("PRINTER_HOST")  # optional mDNS name, e.g. BRW3C2AF4.local
+PRINTER_BACKEND = printing.PRINTER_BACKEND  # "file" writes PNGs instead
 LABEL_SIZE     = os.environ.get("LABEL_SIZE", "62")
 FILE_BACKEND_DIR = os.environ.get("FILE_BACKEND_DIR", "/tmp/tundra-labels")
 POLL_FALLBACK_SEC = 30
@@ -51,10 +49,6 @@ _shutdown = False
 _retry_after = 0.0
 _retry_delay = 0.0
 _unreachable_streak = 0
-
-
-class PrinterUnreachable(Exception):
-    """The printer isn't answering. Transient by assumption — never fails a job."""
 
 
 def _handle_signal(sig, frame):
@@ -74,34 +68,6 @@ def item_url(item_id: str) -> str:
     return f"{PUBLIC_BASE}/i/{item_id}"
 
 
-def _seed_address() -> tuple[Optional[str], int]:
-    """Split PRINTER_IDENT (tcp://host:port) into a host hint and a port."""
-    ident = PRINTER_IDENT or ""
-    if ident.startswith("tcp://"):
-        rest = ident[len("tcp://"):]
-        host, _, port = rest.partition(":")
-        return (host or None, int(port) if port.isdigit() else 9100)
-    return (None, 9100)
-
-
-def _network_identifier() -> str:
-    """Resolve the printer's current address, or raise PrinterUnreachable."""
-    seed_host, port = _seed_address()
-    found = discover.find_printer(
-        model=PRINTER_MODEL,
-        port=port,
-        seed_host=seed_host,
-        mdns_host=PRINTER_HOST,
-        cache_path=discover.cache_path_from_env(),
-    )
-    if not found:
-        raise PrinterUnreachable(
-            f"no printer answering on :{port} (tried {seed_host or 'no seed'}"
-            f"{', ' + PRINTER_HOST if PRINTER_HOST else ''}, then mDNS)"
-        )
-    return f"tcp://{found}"
-
-
 def _print_to_file(img, item_id: str) -> None:
     """Dry-run mode: save the rendered label to disk instead of printing."""
     os.makedirs(FILE_BACKEND_DIR, exist_ok=True)
@@ -118,42 +84,9 @@ def print_label(name: str, added_at: datetime, item_id: str) -> None:
         _print_to_file(img, item_id)
         return
 
-    # Resolve before rendering instructions so an offline printer costs one
-    # short probe rather than a full raster conversion.
-    identifier = _network_identifier() if PRINTER_BACKEND == "network" else PRINTER_IDENT
-
-    # Import brother_ql lazily so the worker can start on machines that lack
-    # pyusb / libusb (e.g., the dev box) as long as they're only using file mode.
-    from brother_ql.backends.helpers import send
-    from brother_ql.conversion import convert
-    from brother_ql.raster import BrotherQLRaster
-
-    # render_label produces portrait (width = print head width) already.
-    # RGB + red=True forces two-color raster format, which the QL-810W's firmware
-    # requires even for single-color prints. Single-color mode is silently rejected
-    # (LED blinks red, status=0x02, no specific error bit) — see memory:tundra-printer.
-    raster = img.convert("RGB")
-    qlr = BrotherQLRaster(PRINTER_MODEL)
-    qlr.exception_on_warning = True
-    instructions = convert(
-        qlr=qlr,
-        images=[raster],
-        label=LABEL_SIZE,
-        rotate="0",
-        threshold=70.0,
-        dither=False,
-        compress=True,
-        red=True,
-        dpi_600=False,
-        hq=True,
-        cut=True,
-    )
-    try:
-        send(instructions=instructions, printer_identifier=identifier,
-             backend_identifier=PRINTER_BACKEND, blocking=True)
-    except OSError as e:
-        # Went away between the probe and the send, or the USB node vanished.
-        raise PrinterUnreachable(f"{identifier}: {e}") from e
+    # Resolving first means an offline printer costs one short probe rather
+    # than a full raster conversion.
+    printing.send_image(img, label_size=LABEL_SIZE)
 
 
 def claim_and_print_one(conn: psycopg.Connection) -> str:
@@ -244,7 +177,8 @@ def drain(conn: psycopg.Connection) -> None:
 
 def main() -> int:
     log.info("starting; printer=%s backend=%s seed=%s host=%s size=%s",
-             PRINTER_MODEL, PRINTER_BACKEND, PRINTER_IDENT, PRINTER_HOST or "-", LABEL_SIZE)
+             printing.PRINTER_MODEL, PRINTER_BACKEND, printing.PRINTER_IDENT,
+             printing.PRINTER_HOST or "-", LABEL_SIZE)
     while not _shutdown:
         try:
             with psycopg.connect(DATABASE_URL, autocommit=True) as conn:
