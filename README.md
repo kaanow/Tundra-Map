@@ -42,12 +42,17 @@ database nor the queue:
 ```sh
 cd pi-print-worker
 set -a; . /etc/tundra-print.env; set +a
-.venv/bin/python print_sign.py --text "What's in the freezer?" --url https://cold.alti2.de
+.venv/bin/python print_sign.py --text "What's in the freezer?"   # writes a preview PNG
+.venv/bin/python print_sign.py --text "What's in the freezer?" --print
 ```
 
-`--save out.png` renders without printing, `--length-mm` changes how much tape
-it uses, `--copies` prints more than one. Signs are NOT rotated — they hang the
-way they print, to be read head-on.
+It renders a preview by default; `--print` is what actually uses tape. Signs
+default to the same length as an item label, and `--length-mm` above that
+refuses without `--big` — tape is expensive and a sign has no business being
+larger than the labels unless someone decided so on purpose.
+
+Signs are NOT rotated, unlike item labels — they hang the way they print, to be
+read head-on.
 
 ## Print pipeline
 
