@@ -5,7 +5,8 @@
  */
 
 export const CATEGORIES = [
-  'meat', 'fish', 'veg', 'fruit', 'prepared', 'stock', 'bread', 'dairy', 'other',
+  'meat', 'fish', 'veg', 'fruit', 'prepared', 'stock', 'bread', 'baking',
+  'dairy', 'other',
 ];
 
 // The two freezers, each with the same three spots.

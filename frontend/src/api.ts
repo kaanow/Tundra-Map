@@ -2,7 +2,6 @@ export type Item = {
   id: string;
   name: string;
   added_at: string;
-  added_by?: string | null;
   quantity?: number | null;
   unit?: string | null;
   source?: string | null;
@@ -11,11 +10,9 @@ export type Item = {
   location?: string | null;
   photo_url?: string | null;
   consumed_at?: string | null;
-  consumed_by?: string | null;
   /** Set only on the single-item route, which shows deleted items to anyone
    *  who knows the ID (i.e. is holding the printed label). */
   deleted_at?: string | null;
-  deleted_by?: string | null;
 };
 
 export type ItemIn = {
@@ -26,15 +23,7 @@ export type ItemIn = {
   notes?: string;
   category?: string;
   location?: string;
-  added_by?: string;
 };
-
-// The name is only used for "added by" / "consumed by" attribution — it is
-// not a credential. The API has no auth at all.
-const USER_STORAGE = 'frz.user';
-
-export function getUser(): string { return localStorage.getItem(USER_STORAGE) ?? ''; }
-export function setUser(u: string) { localStorage.setItem(USER_STORAGE, u); }
 
 async function req(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -75,16 +64,27 @@ export async function createItem(body: ItemIn): Promise<Item> {
   return r.json();
 }
 
-export async function patchItem(id: string, body: Partial<ItemIn>): Promise<Item> {
+/** Fields accept null to clear them. `undefined` would be dropped by
+ *  JSON.stringify and silently leave the value alone. */
+export type ItemPatchBody = {
+  name?: string;
+  quantity?: number | null;
+  unit?: string | null;
+  source?: string | null;
+  notes?: string | null;
+  category?: string | null;
+  location?: string | null;
+};
+
+export async function patchItem(id: string, body: ItemPatchBody): Promise<Item> {
   const r = await req(`/api/items/${encodeURIComponent(id)}`, {
     method: 'PATCH', body: JSON.stringify(body),
   });
   return r.json();
 }
 
-export async function consumeItem(id: string, by?: string): Promise<Item> {
-  const p = by ? `?by=${encodeURIComponent(by)}` : '';
-  const r = await req(`/api/items/${encodeURIComponent(id)}/consume${p}`, { method: 'POST' });
+export async function consumeItem(id: string): Promise<Item> {
+  const r = await req(`/api/items/${encodeURIComponent(id)}/consume`, { method: 'POST' });
   return r.json();
 }
 
@@ -95,9 +95,8 @@ export async function unconsumeItem(id: string): Promise<Item> {
 
 /** Soft delete — the row stays in the DB and the item stays reachable by ID,
  *  so scanning its label still works. It just leaves every list. */
-export async function deleteItem(id: string, by?: string): Promise<void> {
-  const p = by ? `?by=${encodeURIComponent(by)}` : '';
-  await req(`/api/items/${encodeURIComponent(id)}${p}`, { method: 'DELETE' });
+export async function deleteItem(id: string): Promise<void> {
+  await req(`/api/items/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export async function undeleteItem(id: string): Promise<Item> {
@@ -109,7 +108,6 @@ export async function deletePhoto(id: string): Promise<void> {
   await req(`/api/items/${encodeURIComponent(id)}/photo`, { method: 'DELETE' });
 }
 
-export async function enqueuePrint(id: string, by?: string): Promise<void> {
-  const p = by ? `?by=${encodeURIComponent(by)}` : '';
-  await req(`/api/items/${encodeURIComponent(id)}/print${p}`, { method: 'POST' });
+export async function enqueuePrint(id: string): Promise<void> {
+  await req(`/api/items/${encodeURIComponent(id)}/print`, { method: 'POST' });
 }

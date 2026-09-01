@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createItem, enqueuePrint, getUser, uploadPhoto } from '../api';
+import { createItem, enqueuePrint, uploadPhoto } from '../api';
 import { CATEGORIES, LOCATIONS } from '../options';
 import PhotoPicker from '../PhotoPicker';
 
@@ -31,10 +31,9 @@ export default function ItemAdd() {
         location: location || undefined,
         source: source || undefined,
         notes: notes || undefined,
-        added_by: getUser() || undefined,
       });
       if (photo) await uploadPhoto(item.id, photo);
-      if (printLabel) await enqueuePrint(item.id, getUser() || undefined);
+      if (printLabel) await enqueuePrint(item.id);
       nav('/', { replace: true });
     } catch (e) {
       setErr(String(e));

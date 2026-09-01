@@ -10,34 +10,18 @@ from ..models import ItemIn, ItemOut, ItemPatch
 router = APIRouter(prefix="/api/items", tags=["items"])
 
 SELECT_COLS = """
-    i.id, i.name, i.added_at, u1.name AS added_by,
+    i.id, i.name, i.added_at,
     i.quantity, i.unit, i.source, i.notes, i.category, i.location,
-    i.photo_url, i.consumed_at, u2.name AS consumed_by,
-    i.deleted_at, u3.name AS deleted_by
+    i.photo_url, i.consumed_at, i.deleted_at
 """
 
-JOIN = """
-    FROM items i
-    LEFT JOIN users u1 ON u1.id = i.added_by
-    LEFT JOIN users u2 ON u2.id = i.consumed_by
-    LEFT JOIN users u3 ON u3.id = i.deleted_by
-"""
+JOIN = "FROM items i"
 
 # Soft-deleted rows stay in the table but are hidden from every route that
 # browses. Only the single-item route, which you can reach solely by knowing
 # the ID, will show one.
 LIVE = "i.deleted_at IS NULL"
 
-
-async def _resolve_user(cur, name: Optional[str]):
-    if not name:
-        return None
-    await cur.execute(
-        "INSERT INTO users(name) VALUES (%s) ON CONFLICT (name) DO UPDATE SET name=EXCLUDED.name RETURNING id",
-        (name.strip(),),
-    )
-    row = await cur.fetchone()
-    return row[0]
 
 
 async def _fetch(item_id: str, *, include_deleted: bool = False) -> dict:
@@ -105,14 +89,13 @@ async def category_stats():
 async def create_item(body: ItemIn):
     async with conn() as c:
         async with c.cursor() as cur:
-            added_by_id = await _resolve_user(cur, body.added_by)
             await cur.execute(
                 """
-                INSERT INTO items (name, added_by, quantity, unit, source, notes, category, location)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO items (name, quantity, unit, source, notes, category, location)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (body.name.strip(), added_by_id, body.quantity, body.unit, body.source,
+                (body.name.strip(), body.quantity, body.unit, body.source,
                  body.notes, body.category, body.location),
             )
             (new_id,) = await cur.fetchone()
@@ -149,16 +132,15 @@ async def patch_item(item_id: str, body: ItemPatch):
 
 
 @router.post("/{item_id}/consume", response_model=ItemOut)
-async def consume_item(item_id: str, by: Optional[str] = None):
+async def consume_item(item_id: str):
     async with conn() as c:
         async with c.cursor() as cur:
-            consumed_by_id = await _resolve_user(cur, by)
             await cur.execute(
                 """
-                UPDATE items SET consumed_at = now(), consumed_by = %s
+                UPDATE items SET consumed_at = now()
                 WHERE id = %s AND consumed_at IS NULL AND deleted_at IS NULL
                 """,
-                (consumed_by_id, item_id),
+                (item_id,),
             )
     return await _fetch(item_id)
 
@@ -170,7 +152,7 @@ async def unconsume_item(item_id: str):
         async with c.cursor() as cur:
             await cur.execute(
                 """
-                UPDATE items SET consumed_at = NULL, consumed_by = NULL
+                UPDATE items SET consumed_at = NULL
                 WHERE id = %s AND deleted_at IS NULL
                 """,
                 (item_id,),
@@ -181,7 +163,7 @@ async def unconsume_item(item_id: str):
 
 
 @router.delete("/{item_id}", status_code=204)
-async def delete_item(item_id: str, by: Optional[str] = None):
+async def delete_item(item_id: str):
     """Soft delete: flag the row and leave it in the table.
 
     The item disappears from every browsing route. It stays reachable by ID,
@@ -189,13 +171,12 @@ async def delete_item(item_id: str, by: Optional[str] = None):
     """
     async with conn() as c:
         async with c.cursor() as cur:
-            deleted_by_id = await _resolve_user(cur, by)
             await cur.execute(
                 """
-                UPDATE items SET deleted_at = now(), deleted_by = %s
+                UPDATE items SET deleted_at = now()
                 WHERE id = %s AND deleted_at IS NULL
                 """,
-                (deleted_by_id, item_id),
+                (item_id,),
             )
             if cur.rowcount == 0:
                 raise HTTPException(404, "not found")
@@ -209,7 +190,7 @@ async def undelete_item(item_id: str):
     async with conn() as c:
         async with c.cursor() as cur:
             await cur.execute(
-                "UPDATE items SET deleted_at = NULL, deleted_by = NULL WHERE id = %s",
+                "UPDATE items SET deleted_at = NULL WHERE id = %s",
                 (item_id,),
             )
             if cur.rowcount == 0:

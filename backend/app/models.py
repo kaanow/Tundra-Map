@@ -11,7 +11,6 @@ class ItemIn(BaseModel):
     notes: Optional[str] = None
     category: Optional[str] = Field(default=None, max_length=40)
     location: Optional[str] = Field(default=None, max_length=40)
-    added_by: Optional[str] = None  # user name; server resolves to id
 
 
 class ItemPatch(BaseModel):
@@ -29,7 +28,6 @@ class ItemOut(BaseModel):
     id: str
     name: str
     added_at: datetime
-    added_by: Optional[str] = None
     quantity: Optional[float] = None
     unit: Optional[str] = None
     source: Optional[str] = None
@@ -38,11 +36,9 @@ class ItemOut(BaseModel):
     location: Optional[str] = None
     photo_url: Optional[str] = None
     consumed_at: Optional[datetime] = None
-    consumed_by: Optional[str] = None
     # Only ever non-null on the single-item route, which shows deleted items
     # to anyone who knows the ID (i.e. is holding the printed label).
     deleted_at: Optional[datetime] = None
-    deleted_by: Optional[str] = None
 
 
 class PrintJobOut(BaseModel):
