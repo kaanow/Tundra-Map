@@ -12,7 +12,7 @@ QR for the same length of tape. You turn the strip to read it.
     |   [########]   |  ----------->  |  ]##[  13-80-6202  46598  |
     |                |                +---------------------------+
     | Chicken thighs |                 696 dots across the tape
-    | 2026-08-31  id |                 520 dots along it (44 mm)
+    | 2026-08-31  id |                 390 dots along it (33 mm)
     +----------------+
 
 Sizes below are the PRINTED raster: (across-tape dots, along-tape dots). The
@@ -30,7 +30,7 @@ DPI = 300
 MM = DPI / 25.4
 
 LABEL_SIZES = {
-    "62":     (696, 520),   # DK-2205 continuous 62mm, cut at 44mm
+    "62":     (696, 390),   # DK-2205 continuous 62mm, cut at 33mm
     "62x100": (696, 1109),  # DK-1202 shipping
     "29x90":  (306, 991),   # DK-1201 die-cut address label
     "17x54":  (165, 566),   # DK-1204 small address
@@ -69,6 +69,53 @@ def _fit(draw, text: str, max_w: int, max_h: int, start: int,
         if (b[2] - b[0]) <= max_w and (b[3] - b[1]) <= max_h:
             return f
     return _font(min_, bold)
+
+
+def _wrap(draw, text: str, font: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
+    """Greedy word wrap. A single word wider than max_w gets its own line."""
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        trial = f"{current} {word}".strip()
+        if not current or draw.textlength(trial, font=font) <= max_w:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [text]
+
+
+def _measure(draw, lines, font, leading) -> tuple[int, list[int]]:
+    heights = [draw.textbbox((0, 0), ln, font=font)[3] -
+               draw.textbbox((0, 0), ln, font=font)[1] for ln in lines]
+    return sum(heights) + leading * (len(lines) - 1), heights
+
+
+def _fit_wrapped(draw, text: str, max_w: int, max_h: int, start: int,
+                 min_: int = 18, max_lines: int = 3):
+    """Largest font at which `text`, wrapped, fits the box.
+
+    A narrow label leaves the name width-bound with vertical room to spare;
+    wrapping spends that room on a bigger font instead of white space.
+    """
+    for size in range(start, min_ - 1, -2):
+        f = _font(size, True)
+        lines = _wrap(draw, text, f, max_w)
+        if len(lines) > max_lines:
+            continue
+        if any(draw.textlength(ln, font=f) > max_w for ln in lines):
+            continue  # an unbreakable word still overflows
+        leading = max(2, int(size * 0.12))
+        total, heights = _measure(draw, lines, f, leading)
+        if total <= max_h:
+            return f, lines, leading, total, heights
+    f = _font(min_, True)
+    lines = _wrap(draw, text, f, max_w)[:max_lines]
+    leading = max(2, int(min_ * 0.12))
+    total, heights = _measure(draw, lines, f, leading)
+    return f, lines, leading, total, heights
 
 
 def _qr(url: str, side_px: int) -> Image.Image:
@@ -117,27 +164,32 @@ def render_label(
         return img.rotate(90, expand=True)
 
     date_str = added_at.strftime("%Y-%m-%d")
-    name_font = _fit(draw, name, tw, int(th * 0.55), start=int(th * 0.75))
-    nb = draw.textbbox((0, 0), name, font=name_font)
-    nh = nb[3] - nb[1]
 
+    # Reserve a strip for the date/id line, then give the rest to the name.
+    footer_h = max(_mm(3.0), int(th * 0.22))
     gap = _mm(1.0)
-    rest_h = max(th - nh - gap, _mm(2))
-    date_font = _fit(draw, date_str, int(tw * 0.62), rest_h,
-                     start=int(rest_h * 0.95), bold=False)
+    name_font, name_lines, leading, name_h, line_hs = _fit_wrapped(
+        draw, name, tw, th - footer_h - gap, start=int(th * 0.8)
+    )
+
+    date_font = _fit(draw, date_str, int(tw * 0.62), footer_h,
+                     start=footer_h, bold=False)
     db = draw.textbbox((0, 0), date_str, font=date_font)
 
     id_font = ib = None
     if item_id:
-        id_font = _fit(draw, item_id, int(tw * 0.34), rest_h,
-                       start=int(rest_h * 0.95), bold=False)
+        id_font = _fit(draw, item_id, int(tw * 0.34), footer_h,
+                       start=footer_h, bold=False)
         ib = draw.textbbox((0, 0), item_id, font=id_font)
 
     line2_h = max(db[3] - db[1], (ib[3] - ib[1]) if ib else 0)
-    y = ty + max(0, (th - (nh + gap + line2_h)) // 2)
+    y = ty + max(0, (th - (name_h + gap + line2_h)) // 2)
 
-    draw.text((tx, y - nb[1]), name, font=name_font, fill=0)
-    y2 = y + nh + gap
+    for line, lh in zip(name_lines, line_hs):
+        b = draw.textbbox((0, 0), line, font=name_font)
+        draw.text((tx, y - b[1]), line, font=name_font, fill=0)
+        y += lh + leading
+    y2 = y - leading + gap
     draw.text((tx, y2 - db[1]), date_str, font=date_font, fill=0)
     if item_id and id_font and ib:
         id_w = draw.textlength(item_id, font=id_font)
